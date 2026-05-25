@@ -1,0 +1,29 @@
+{
+  "name": "tools-agent",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/XoaquinSanchezVarsallona/tools-agent.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/XoaquinSanchezVarsallona/tools-agent/issues"
+  },
+  "homepage": "https://github.com/XoaquinSanchezVarsallona/tools-agent#readme",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "openai": "^6.39.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3"
+  }
+}
