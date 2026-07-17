@@ -8,7 +8,7 @@ import { toolRegistry, ToolName } from "../tools/index";
 import { AgentConfig } from "../policies/config";
 import { validateToolCall, PolicyDecision } from "../policies/validate";
 
-const AGENT_INSTRUCTIONS = `
+const DEFAULT_AGENT_INSTRUCTIONS = `
 Sos un coding agent.
 Tu objetivo es resolver tareas de programación usando tools.
 No inventes contenido de archivos: usá read_file.
@@ -17,53 +17,77 @@ Después de modificar código, intentá verificar con tests o comandos relevante
 Cuando termines, explicá brevemente qué hiciste.
 `.trim();
 
+export interface ToolCallLogEntry {
+  tool: ToolName;
+  args: unknown;
+  outputSummary: string;
+  denied: boolean;
+}
+
 type AgentOptions = {
   config: AgentConfig;
   supervisionMode: boolean;
   confirmAction?: (message: string) => Promise<boolean>;
+  instructions?: string;
+  allowedTools?: ToolName[];
 };
+
+export interface AgentTurnResult {
+  finalText: string;
+  iterations: number;
+  toolCallLog: ToolCallLogEntry[];
+}
 
 export async function runAgentTurn(
     userMessage: string,
     conversation: ResponseInputItem[],
     options: AgentOptions
-) {
+): Promise<AgentTurnResult> {
   addUserMessage(conversation, userMessage);
   let iterations = 0;
+  const toolCallLog: ToolCallLogEntry[] = [];
 
   while (true) {
     iterations++;
 
-    const response = await createAgentResponse(conversation);
+    const response = await createAgentResponse(conversation, options);
     appendResponseOutput(conversation, response.output);
 
     const toolCalls = findToolCalls(response.output);
 
     if (toolCalls.length === 0) {
-      return buildFinalResult(response.output_text, iterations);
+      return buildFinalResult(response.output_text, iterations, toolCallLog);
     }
 
     for (const toolCall of toolCalls) {
-      await handleToolCall(toolCall, conversation, options);
+      await handleToolCall(toolCall, conversation, options, toolCallLog);
     }
   }
 }
 
-async function createAgentResponse(conversation: ResponseInputItem[]) {
+async function createAgentResponse(
+    conversation: ResponseInputItem[],
+    options: AgentOptions
+) {
+  const activeToolDefs = options.allowedTools
+      ? toolDefinitions.filter((def) => options.allowedTools!.includes(def.name as ToolName))
+      : toolDefinitions;
+
   return llm.responses.create({
     model: "gpt-5.2",
-    instructions: AGENT_INSTRUCTIONS,
+    instructions: options.instructions ?? DEFAULT_AGENT_INSTRUCTIONS,
     input: conversation,
-    tools: toolDefinitions
+    tools: activeToolDefs
   });
 }
 
 async function handleToolCall(
     toolCall: ResponseFunctionToolCall,
     conversation: ResponseInputItem[],
-    options: AgentOptions
+    options: AgentOptions,
+    toolCallLog: ToolCallLogEntry[]
 ) {
-  const parsedCall = parseToolCall(toolCall);
+  const parsedCall = parseToolCall(toolCall, options);
 
   if (!parsedCall.ok) {
     appendToolOutput(conversation, toolCall.call_id, parsedCall.output);
@@ -78,6 +102,12 @@ async function handleToolCall(
 
   if (!decision.allowed) {
     appendToolOutput(conversation, toolCall.call_id, deniedToolOutput(decision.reason));
+    toolCallLog.push({
+      tool: parsedCall.name,
+      args: parsedCall.args,
+      outputSummary: `denegado: ${decision.reason}`,
+      denied: true
+    });
     return;
   }
 
@@ -85,20 +115,44 @@ async function handleToolCall(
 
   if (!approved) {
     appendToolOutput(conversation, toolCall.call_id, rejectedToolOutput());
+    toolCallLog.push({
+      tool: parsedCall.name,
+      args: parsedCall.args,
+      outputSummary: "rechazado por el usuario",
+      denied: true
+    });
     return;
   }
 
   const output = await executeTool(parsedCall.name, parsedCall.args);
   appendToolOutput(conversation, toolCall.call_id, output);
+  toolCallLog.push({
+    tool: parsedCall.name,
+    args: parsedCall.args,
+    outputSummary: summarizeOutput(output),
+    denied: false
+  });
 }
 
-function parseToolCall(toolCall: ResponseFunctionToolCall) {
+function summarizeOutput(output: unknown): string {
+  const asString = JSON.stringify(output);
+  return asString.length > 200 ? asString.slice(0, 200) + "…" : asString;
+}
+
+function parseToolCall(toolCall: ResponseFunctionToolCall, options: AgentOptions) {
   const toolName = toolCall.name;
 
   if (!isToolName(toolName)) {
     return {
       ok: false as const,
       output: { error: `Tool desconocida: ${toolName}` }
+    };
+  }
+
+  if (options.allowedTools && !options.allowedTools.includes(toolName)) {
+    return {
+      ok: false as const,
+      output: { error: `Tool "${toolName}" no está permitida para este subagente.` }
     };
   }
 
@@ -181,8 +235,12 @@ function addUserMessage(conversation: ResponseInputItem[], userMessage: string) 
   });
 }
 
-function buildFinalResult(finalText: string, iterations: number) {
-  return { finalText, iterations };
+function buildFinalResult(
+    finalText: string,
+    iterations: number,
+    toolCallLog: ToolCallLogEntry[]
+): AgentTurnResult {
+  return { finalText, iterations, toolCallLog };
 }
 
 function rejectedToolOutput() {
