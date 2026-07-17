@@ -1,8 +1,11 @@
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { runAgentTurn } from "./agent/harness";
+import {loadAgentConfig} from "./policies/config";
 
 const rl = readline.createInterface({ input, output });
+const configPath = process.env.AGENT_CONFIG_PATH ?? "./agent.config.yaml";
+const config = loadAgentConfig(configPath);
 
 const conversation: any[] = [];
 
@@ -97,6 +100,7 @@ Generá un nuevo plan o continuá según corresponda.
 
 async function runNormalTurn(userInput: string) {
   return runAgentTurn(userInput, conversation, {
+    config,
     supervisionMode: state.supervisionMode,
     confirmAction
   });
@@ -104,6 +108,7 @@ async function runNormalTurn(userInput: string) {
 
 async function runPlanningTurn(userInput: string) {
   const planResult = await runAgentTurn(buildPlanPrompt(userInput), conversation, {
+    config,
     supervisionMode: false,
     confirmAction
   });

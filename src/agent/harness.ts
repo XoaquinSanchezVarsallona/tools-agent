@@ -5,6 +5,8 @@ import type {
 import { llm } from "../llm/client";
 import { toolDefinitions } from "../toolsDefinition";
 import { toolRegistry, ToolName } from "../tools/index";
+import { AgentConfig } from "../policies/config";
+import { validateToolCall, PolicyDecision } from "../policies/validate";
 
 const AGENT_INSTRUCTIONS = `
 Sos un coding agent.
@@ -15,20 +17,16 @@ Después de modificar código, intentá verificar con tests o comandos relevante
 Cuando termines, explicá brevemente qué hiciste.
 `.trim();
 
-const SYSTEM_MODIFYING_TOOLS = new Set<ToolName>([
-  "write_file",
-  "run_command"
-]);
-
 type AgentOptions = {
+  config: AgentConfig;
   supervisionMode: boolean;
   confirmAction?: (message: string) => Promise<boolean>;
 };
 
 export async function runAgentTurn(
-  userMessage: string,
-  conversation: ResponseInputItem[],
-  options: AgentOptions
+    userMessage: string,
+    conversation: ResponseInputItem[],
+    options: AgentOptions
 ) {
   addUserMessage(conversation, userMessage);
   let iterations = 0;
@@ -61,9 +59,9 @@ async function createAgentResponse(conversation: ResponseInputItem[]) {
 }
 
 async function handleToolCall(
-  toolCall: ResponseFunctionToolCall,
-  conversation: ResponseInputItem[],
-  options: AgentOptions
+    toolCall: ResponseFunctionToolCall,
+    conversation: ResponseInputItem[],
+    options: AgentOptions
 ) {
   const parsedCall = parseToolCall(toolCall);
 
@@ -72,7 +70,18 @@ async function handleToolCall(
     return;
   }
 
-  const approved = await requestApproval(parsedCall.name, parsedCall.args, options);
+  const decision = validateToolCall(
+      options.config,
+      parsedCall.name,
+      parsedCall.args as Record<string, unknown>
+  );
+
+  if (!decision.allowed) {
+    appendToolOutput(conversation, toolCall.call_id, deniedToolOutput(decision.reason));
+    return;
+  }
+
+  const approved = await requestApproval(parsedCall.name, parsedCall.args, decision, options);
 
   if (!approved) {
     appendToolOutput(conversation, toolCall.call_id, rejectedToolOutput());
@@ -116,25 +125,26 @@ async function executeTool(toolName: ToolName, args: unknown) {
 }
 
 async function requestApproval(
-  toolName: ToolName,
-  args: unknown,
-  options: AgentOptions
+    toolName: ToolName,
+    args: unknown,
+    decision: PolicyDecision,
+    options: AgentOptions
 ) {
-  if (!shouldRequestApproval(toolName, options)) {
+  if (!options.supervisionMode) {
+    return true;
+  }
+
+  if (!decision.requiresApproval) {
     return true;
   }
 
   const message = `El agente quiere ejecutar ${toolName} con args: ${JSON.stringify(
-    args,
-    null,
-    2
-  )}`;
+      args,
+      null,
+      2
+  )}\nMotivo de la aprobación: ${decision.reason}`;
 
   return Boolean(await options.confirmAction?.(message));
-}
-
-function shouldRequestApproval(toolName: ToolName, options: AgentOptions) {
-  return options.supervisionMode && SYSTEM_MODIFYING_TOOLS.has(toolName);
 }
 
 function isToolName(name: string): name is ToolName {
@@ -143,8 +153,8 @@ function isToolName(name: string): name is ToolName {
 
 function findToolCalls(output: unknown[]) {
   return output.filter(
-    (item): item is ResponseFunctionToolCall =>
-      isResponseItem(item) && item.type === "function_call"
+      (item): item is ResponseFunctionToolCall =>
+          isResponseItem(item) && item.type === "function_call"
   );
 }
 
@@ -153,9 +163,9 @@ function appendResponseOutput(conversation: ResponseInputItem[], output: unknown
 }
 
 function appendToolOutput(
-  conversation: ResponseInputItem[],
-  callId: string,
-  output: unknown
+    conversation: ResponseInputItem[],
+    callId: string,
+    output: unknown
 ) {
   conversation.push({
     type: "function_call_output",
@@ -179,6 +189,13 @@ function rejectedToolOutput() {
   return {
     rejected: true,
     message: "El usuario rechazó esta acción."
+  };
+}
+
+function deniedToolOutput(reason: string) {
+  return {
+    denied: true,
+    message: `Acción bloqueada por política de configuración: ${reason}`
   };
 }
 

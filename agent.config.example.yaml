@@ -1,0 +1,30 @@
+workspace: ./fixture-user-api
+
+permissions:
+  read:
+    deny:
+      - ".env"
+      - "**/*.pem"
+      - "secrets/**"
+  write:
+    deny:
+      - ".github/**"
+      - "package-lock.json"
+      - "package.json"
+
+commands:
+  deny:
+    - "rm -rf"
+    - "git push"
+  require_approval:
+    - "npm install"
+    - "pip install"
+    - "git commit"
+
+rag:
+  topK: 5
+  minScore: 0.55
+
+observability:
+  provider: langfuse
+  enabled: true

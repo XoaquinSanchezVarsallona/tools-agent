@@ -20,7 +20,9 @@
   "homepage": "https://github.com/XoaquinSanchezVarsallona/tools-agent#readme",
   "dependencies": {
     "dotenv": "^17.4.2",
-    "openai": "^6.39.0"
+    "minimatch": "^10.2.5",
+    "openai": "^6.39.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "^25.9.1",
