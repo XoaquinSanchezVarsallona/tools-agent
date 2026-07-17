@@ -1,5 +1,8 @@
-export const toolDefinitions = [
-  {
+import type { FunctionTool } from "openai/resources/responses/responses";
+import type { ToolName } from "./tools/index";
+
+const toolDefinitionsByName: Record<ToolName, FunctionTool> = {
+  read_file: {
     type: "function" as const,
     name: "read_file",
     description: "Lee el contenido de un archivo dado su path.",
@@ -16,7 +19,7 @@ export const toolDefinitions = [
       additionalProperties: false
     }
   },
-  {
+  write_file: {
     type: "function" as const,
     name: "write_file",
     description: "Escribe contenido en un archivo, reemplazando su contenido actual.",
@@ -37,7 +40,7 @@ export const toolDefinitions = [
       additionalProperties: false
     }
   },
-  {
+  list_files: {
     type: "function" as const,
     name: "list_files",
     description: "Lista archivos y carpetas dentro de un directorio.",
@@ -54,7 +57,7 @@ export const toolDefinitions = [
       additionalProperties: false
     }
   },
-  {
+  run_command: {
     type: "function" as const,
     name: "run_command",
     description: "Ejecuta un comando de terminal y devuelve stdout y stderr.",
@@ -71,4 +74,8 @@ export const toolDefinitions = [
       additionalProperties: false
     }
   }
-];
+};
+
+export function getToolDefinitions(toolNames: readonly ToolName[]) {
+  return toolNames.map((toolName) => toolDefinitionsByName[toolName]);
+}

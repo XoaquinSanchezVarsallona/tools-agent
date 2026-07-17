@@ -3,7 +3,7 @@ import type {
   ResponseInputItem
 } from "openai/resources/responses/responses";
 import { llm } from "../llm/client";
-import { toolDefinitions } from "../toolsDefinition";
+import { getToolDefinitions } from "../toolsDefinition";
 import { toolRegistry, ToolName } from "../tools/index";
 
 const AGENT_INSTRUCTIONS = `
@@ -15,12 +15,37 @@ Después de modificar código, intentá verificar con tests o comandos relevante
 Cuando termines, explicá brevemente qué hiciste.
 `.trim();
 
+const PLANNING_INSTRUCTIONS = `
+${AGENT_INSTRUCTIONS}
+
+Estás en modo planificación.
+Usá las tools de lectura disponibles para entender el proyecto cuando sea necesario.
+No implementes cambios. Terminá con un plan numerado y concreto para resolver la tarea.
+`.trim();
+
+export type AgentMode = "normal" | "planning";
+
+const MODE_CONFIG: Record<
+  AgentMode,
+  { instructions: string; toolNames: readonly ToolName[] }
+> = {
+  normal: {
+    instructions: AGENT_INSTRUCTIONS,
+    toolNames: ["read_file", "list_files", "write_file", "run_command"]
+  },
+  planning: {
+    instructions: PLANNING_INSTRUCTIONS,
+    toolNames: ["read_file", "list_files"]
+  }
+};
+
 const SYSTEM_MODIFYING_TOOLS = new Set<ToolName>([
   "write_file",
   "run_command"
 ]);
 
 type AgentOptions = {
+  mode: AgentMode;
   supervisionMode: boolean;
   confirmAction?: (message: string) => Promise<boolean>;
 };
@@ -30,13 +55,14 @@ export async function runAgentTurn(
   conversation: ResponseInputItem[],
   options: AgentOptions
 ) {
+  const modeConfig = MODE_CONFIG[options.mode];
   addUserMessage(conversation, userMessage);
   let iterations = 0;
 
   while (true) {
     iterations++;
 
-    const response = await createAgentResponse(conversation);
+    const response = await createAgentResponse(conversation, modeConfig);
     appendResponseOutput(conversation, response.output);
 
     const toolCalls = findToolCalls(response.output);
@@ -46,26 +72,30 @@ export async function runAgentTurn(
     }
 
     for (const toolCall of toolCalls) {
-      await handleToolCall(toolCall, conversation, options);
+      await handleToolCall(toolCall, conversation, options, modeConfig.toolNames);
     }
   }
 }
 
-async function createAgentResponse(conversation: ResponseInputItem[]) {
+async function createAgentResponse(
+  conversation: ResponseInputItem[],
+  modeConfig: { instructions: string; toolNames: readonly ToolName[] }
+) {
   return llm.responses.create({
     model: "gpt-5.2",
-    instructions: AGENT_INSTRUCTIONS,
+    instructions: modeConfig.instructions,
     input: conversation,
-    tools: toolDefinitions
+    tools: getToolDefinitions(modeConfig.toolNames)
   });
 }
 
 async function handleToolCall(
   toolCall: ResponseFunctionToolCall,
   conversation: ResponseInputItem[],
-  options: AgentOptions
+  options: AgentOptions,
+  allowedToolNames: readonly ToolName[]
 ) {
-  const parsedCall = parseToolCall(toolCall);
+  const parsedCall = parseToolCall(toolCall, allowedToolNames);
 
   if (!parsedCall.ok) {
     appendToolOutput(conversation, toolCall.call_id, parsedCall.output);
@@ -83,13 +113,23 @@ async function handleToolCall(
   appendToolOutput(conversation, toolCall.call_id, output);
 }
 
-function parseToolCall(toolCall: ResponseFunctionToolCall) {
+function parseToolCall(
+  toolCall: ResponseFunctionToolCall,
+  allowedToolNames: readonly ToolName[]
+) {
   const toolName = toolCall.name;
 
   if (!isToolName(toolName)) {
     return {
       ok: false as const,
       output: { error: `Tool desconocida: ${toolName}` }
+    };
+  }
+
+  if (!allowedToolNames.includes(toolName)) {
+    return {
+      ok: false as const,
+      output: { error: `Tool no disponible en el modo actual: ${toolName}` }
     };
   }
 
