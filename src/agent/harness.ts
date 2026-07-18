@@ -1,14 +1,14 @@
 import type {
-  ResponseFunctionToolCall,
-  ResponseInputItem
+    ResponseFunctionToolCall,
+    ResponseInputItem
 } from "openai/resources/responses/responses";
 import { llm } from "../llm/client";
-import { toolDefinitions } from "../toolsDefinition";
-import { toolRegistry, ToolName } from "../tools/index";
-import { AgentConfig } from "../policies/config";
-import { validateToolCall, PolicyDecision } from "../policies/validate";
+import type { AgentConfig } from "../policies/config";
+import { validateToolCall, type PolicyDecision } from "../policies/validate";
+import { toolRegistry, type ToolName } from "../tools/index";
+import { getToolDefinitions } from "../toolsDefinition";
 
-const DEFAULT_AGENT_INSTRUCTIONS = `
+const AGENT_INSTRUCTIONS = `
 Sos un coding agent.
 Tu objetivo es resolver tareas de programación usando tools.
 No inventes contenido de archivos: usá read_file.
@@ -17,25 +17,68 @@ Después de modificar código, intentá verificar con tests o comandos relevante
 Cuando termines, explicá brevemente qué hiciste.
 `.trim();
 
-export interface ToolCallLogEntry {
-  tool: ToolName;
-  args: unknown;
-  outputSummary: string;
-  denied: boolean;
+const PLANNING_INSTRUCTIONS = `
+${AGENT_INSTRUCTIONS}
+
+Estás en modo planificación.
+Usá las tools de lectura disponibles para entender el proyecto cuando sea necesario.
+No implementes cambios. Terminá con un plan numerado y concreto para resolver la tarea.
+`.trim();
+
+const EXPLORER_INSTRUCTIONS = `
+Sos el subagente Explorer dentro de un sistema multi-agente de coding.
+Tu única responsabilidad es entender el repositorio, no modificarlo.
+Usá list_files y read_file para reunir evidencia sobre la estructura, arquitectura,
+dependencias, convenciones y archivos relevantes. No inventes nada que no hayas leído.
+Respondé con un resumen claro y estructurado.
+`.trim();
+
+export type AgentMode = "normal" | "planning" | "explorer";
+
+export interface ModeConfig {
+    instructions: string;
+    toolNames: readonly ToolName[];
 }
 
-type AgentOptions = {
-  config: AgentConfig;
-  supervisionMode: boolean;
-  confirmAction?: (message: string) => Promise<boolean>;
-  instructions?: string;
-  allowedTools?: ToolName[];
+const MODE_CONFIG: Record<AgentMode, ModeConfig> = {
+    normal: {
+        instructions: AGENT_INSTRUCTIONS,
+        toolNames: ["read_file", "list_files", "write_file", "run_command"]
+    },
+    planning: {
+        instructions: PLANNING_INSTRUCTIONS,
+        toolNames: ["read_file", "list_files"]
+    },
+    explorer: {
+        instructions: EXPLORER_INSTRUCTIONS,
+        toolNames: ["read_file", "list_files"]
+    }
 };
 
+const SYSTEM_MODIFYING_TOOLS = new Set<ToolName>(["write_file", "run_command"]);
+
+export interface ToolCallLogEntry {
+    tool: ToolName;
+    args: unknown;
+    outputSummary: string;
+    denied: boolean;
+}
+
+export interface AgentOptions {
+    mode: AgentMode;
+    config?: AgentConfig;
+    supervisionMode: boolean;
+    confirmAction?: (message: string) => Promise<boolean>;
+}
+
 export interface AgentTurnResult {
-  finalText: string;
-  iterations: number;
-  toolCallLog: ToolCallLogEntry[];
+    finalText: string;
+    iterations: number;
+    toolCallLog: ToolCallLogEntry[];
+}
+
+export function getModeConfig(mode: AgentMode): ModeConfig {
+    return MODE_CONFIG[mode];
 }
 
 export async function runAgentTurn(
@@ -43,139 +86,105 @@ export async function runAgentTurn(
     conversation: ResponseInputItem[],
     options: AgentOptions
 ): Promise<AgentTurnResult> {
-  addUserMessage(conversation, userMessage);
-  let iterations = 0;
-  const toolCallLog: ToolCallLogEntry[] = [];
+    const modeConfig = getModeConfig(options.mode);
+    const toolCallLog: ToolCallLogEntry[] = [];
+    addUserMessage(conversation, userMessage);
+    let iterations = 0;
 
-  while (true) {
-    iterations++;
+    while (true) {
+        iterations++;
+        const response = await createAgentResponse(conversation, modeConfig);
+        appendResponseOutput(conversation, response.output);
+        const toolCalls = findToolCalls(response.output);
 
-    const response = await createAgentResponse(conversation, options);
-    appendResponseOutput(conversation, response.output);
+        if (toolCalls.length === 0) {
+            return { finalText: response.output_text, iterations, toolCallLog };
+        }
 
-    const toolCalls = findToolCalls(response.output);
-
-    if (toolCalls.length === 0) {
-      return buildFinalResult(response.output_text, iterations, toolCallLog);
+        for (const toolCall of toolCalls) {
+            await handleToolCall(toolCall, conversation, options, modeConfig, toolCallLog);
+        }
     }
-
-    for (const toolCall of toolCalls) {
-      await handleToolCall(toolCall, conversation, options, toolCallLog);
-    }
-  }
 }
 
 async function createAgentResponse(
     conversation: ResponseInputItem[],
-    options: AgentOptions
+    modeConfig: ModeConfig
 ) {
-  const activeToolDefs = options.allowedTools
-      ? toolDefinitions.filter((def) => options.allowedTools!.includes(def.name as ToolName))
-      : toolDefinitions;
-
-  return llm.responses.create({
-    model: "gpt-5.2",
-    instructions: options.instructions ?? DEFAULT_AGENT_INSTRUCTIONS,
-    input: conversation,
-    tools: activeToolDefs
-  });
+    return llm.responses.create({
+        model: "gpt-5.2",
+        instructions: modeConfig.instructions,
+        input: conversation,
+        tools: getToolDefinitions(modeConfig.toolNames)
+    });
 }
 
 async function handleToolCall(
     toolCall: ResponseFunctionToolCall,
     conversation: ResponseInputItem[],
     options: AgentOptions,
+    modeConfig: ModeConfig,
     toolCallLog: ToolCallLogEntry[]
 ) {
-  const parsedCall = parseToolCall(toolCall, options);
+    const parsedCall = parseToolCall(toolCall, modeConfig.toolNames);
+    if (!parsedCall.ok) {
+        appendToolOutput(conversation, toolCall.call_id, parsedCall.output);
+        return;
+    }
 
-  if (!parsedCall.ok) {
-    appendToolOutput(conversation, toolCall.call_id, parsedCall.output);
-    return;
-  }
+    const decision = options.config
+        ? validateToolCall(options.config, parsedCall.name, asToolArgs(parsedCall.args))
+        : defaultPolicyDecision(parsedCall.name, options);
 
-  const decision = validateToolCall(
-      options.config,
-      parsedCall.name,
-      parsedCall.args as Record<string, unknown>
-  );
+    if (!decision.allowed) {
+        const summary = `denegado: ${decision.reason}`;
+        appendToolOutput(conversation, toolCall.call_id, deniedToolOutput(decision.reason));
+        toolCallLog.push(logEntry(parsedCall.name, parsedCall.args, summary, true));
+        return;
+    }
 
-  if (!decision.allowed) {
-    appendToolOutput(conversation, toolCall.call_id, deniedToolOutput(decision.reason));
-    toolCallLog.push({
-      tool: parsedCall.name,
-      args: parsedCall.args,
-      outputSummary: `denegado: ${decision.reason}`,
-      denied: true
-    });
-    return;
-  }
+    const approved = await requestApproval(parsedCall.name, parsedCall.args, decision, options);
+    if (!approved) {
+        appendToolOutput(conversation, toolCall.call_id, rejectedToolOutput());
+        toolCallLog.push(logEntry(parsedCall.name, parsedCall.args, "rechazado por el usuario", true));
+        return;
+    }
 
-  const approved = await requestApproval(parsedCall.name, parsedCall.args, decision, options);
-
-  if (!approved) {
-    appendToolOutput(conversation, toolCall.call_id, rejectedToolOutput());
-    toolCallLog.push({
-      tool: parsedCall.name,
-      args: parsedCall.args,
-      outputSummary: "rechazado por el usuario",
-      denied: true
-    });
-    return;
-  }
-
-  const output = await executeTool(parsedCall.name, parsedCall.args);
-  appendToolOutput(conversation, toolCall.call_id, output);
-  toolCallLog.push({
-    tool: parsedCall.name,
-    args: parsedCall.args,
-    outputSummary: summarizeOutput(output),
-    denied: false
-  });
+    const output = await executeTool(parsedCall.name, parsedCall.args);
+    appendToolOutput(conversation, toolCall.call_id, output);
+    toolCallLog.push(logEntry(parsedCall.name, parsedCall.args, summarizeOutput(output), false));
 }
 
-function summarizeOutput(output: unknown): string {
-  const asString = JSON.stringify(output);
-  return asString.length > 200 ? asString.slice(0, 200) + "…" : asString;
-}
-
-function parseToolCall(toolCall: ResponseFunctionToolCall, options: AgentOptions) {
-  const toolName = toolCall.name;
-
-  if (!isToolName(toolName)) {
-    return {
-      ok: false as const,
-      output: { error: `Tool desconocida: ${toolName}` }
-    };
-  }
-
-  if (options.allowedTools && !options.allowedTools.includes(toolName)) {
-    return {
-      ok: false as const,
-      output: { error: `Tool "${toolName}" no está permitida para este subagente.` }
-    };
-  }
-
-  try {
-    return {
-      ok: true as const,
-      name: toolName,
-      args: JSON.parse(toolCall.arguments || "{}") as unknown
-    };
-  } catch (error: unknown) {
-    return {
-      ok: false as const,
-      output: { error: `Argumentos inválidos: ${formatError(error)}` }
-    };
-  }
+function parseToolCall(toolCall: ResponseFunctionToolCall, allowed: readonly ToolName[]) {
+    if (!isToolName(toolCall.name)) {
+        return { ok: false as const, output: { error: `Tool desconocida: ${toolCall.name}` } };
+    }
+    if (!allowed.includes(toolCall.name)) {
+        return {
+            ok: false as const,
+            output: { error: `Tool no disponible en el modo actual: ${toolCall.name}` }
+        };
+    }
+    try {
+        return {
+            ok: true as const,
+            name: toolCall.name,
+            args: JSON.parse(toolCall.arguments || "{}") as unknown
+        };
+    } catch (error: unknown) {
+        return {
+            ok: false as const,
+            output: { error: `Argumentos inválidos: ${formatError(error)}` }
+        };
+    }
 }
 
 async function executeTool(toolName: ToolName, args: unknown) {
-  try {
-    return await toolRegistry[toolName](args as never);
-  } catch (error: unknown) {
-    return { error: formatError(error) };
-  }
+    try {
+        return await toolRegistry[toolName](args as never);
+    } catch (error: unknown) {
+        return { error: formatError(error) };
+    }
 }
 
 async function requestApproval(
@@ -184,83 +193,70 @@ async function requestApproval(
     decision: PolicyDecision,
     options: AgentOptions
 ) {
-  if (!options.supervisionMode) {
-    return true;
-  }
+    const requiresApproval = options.supervisionMode && (
+        decision.requiresApproval || SYSTEM_MODIFYING_TOOLS.has(toolName)
+    );
+    if (!requiresApproval) return true;
 
-  if (!decision.requiresApproval) {
-    return true;
-  }
+    const reason = decision.requiresApproval ? `\nMotivo: ${decision.reason}` : "";
+    return Boolean(await options.confirmAction?.(
+        `El agente quiere ejecutar ${toolName} con args: ${JSON.stringify(args, null, 2)}${reason}`
+    ));
+}
 
-  const message = `El agente quiere ejecutar ${toolName} con args: ${JSON.stringify(
-      args,
-      null,
-      2
-  )}\nMotivo de la aprobación: ${decision.reason}`;
+function defaultPolicyDecision(toolName: ToolName, options: AgentOptions): PolicyDecision {
+    return SYSTEM_MODIFYING_TOOLS.has(toolName) && options.supervisionMode
+        ? { allowed: true, requiresApproval: true, reason: "Acción que modifica el sistema." }
+        : { allowed: true, requiresApproval: false };
+}
 
-  return Boolean(await options.confirmAction?.(message));
+function logEntry(tool: ToolName, args: unknown, outputSummary: string, denied: boolean) {
+    return { tool, args, outputSummary, denied } satisfies ToolCallLogEntry;
+}
+
+function asToolArgs(args: unknown): Record<string, unknown> {
+    return typeof args === "object" && args !== null ? args as Record<string, unknown> : {};
+}
+
+function summarizeOutput(output: unknown): string {
+    const serialized = JSON.stringify(output);
+    return serialized.length > 200 ? `${serialized.slice(0, 200)}…` : serialized;
 }
 
 function isToolName(name: string): name is ToolName {
-  return name in toolRegistry;
+    return name in toolRegistry;
 }
 
 function findToolCalls(output: unknown[]) {
-  return output.filter(
-      (item): item is ResponseFunctionToolCall =>
-          isResponseItem(item) && item.type === "function_call"
-  );
+    return output.filter((item): item is ResponseFunctionToolCall =>
+        isResponseItem(item) && item.type === "function_call"
+    );
 }
 
 function appendResponseOutput(conversation: ResponseInputItem[], output: unknown[]) {
-  conversation.push(...(output as ResponseInputItem[]));
+    conversation.push(...(output as ResponseInputItem[]));
 }
 
-function appendToolOutput(
-    conversation: ResponseInputItem[],
-    callId: string,
-    output: unknown
-) {
-  conversation.push({
-    type: "function_call_output",
-    call_id: callId,
-    output: JSON.stringify(output)
-  });
+function appendToolOutput(conversation: ResponseInputItem[], callId: string, output: unknown) {
+    conversation.push({ type: "function_call_output", call_id: callId, output: JSON.stringify(output) });
 }
 
 function addUserMessage(conversation: ResponseInputItem[], userMessage: string) {
-  conversation.push({
-    role: "user",
-    content: userMessage
-  });
-}
-
-function buildFinalResult(
-    finalText: string,
-    iterations: number,
-    toolCallLog: ToolCallLogEntry[]
-): AgentTurnResult {
-  return { finalText, iterations, toolCallLog };
+    conversation.push({ role: "user", content: userMessage });
 }
 
 function rejectedToolOutput() {
-  return {
-    rejected: true,
-    message: "El usuario rechazó esta acción."
-  };
+    return { rejected: true, message: "El usuario rechazó esta acción." };
 }
 
 function deniedToolOutput(reason: string) {
-  return {
-    denied: true,
-    message: `Acción bloqueada por política de configuración: ${reason}`
-  };
+    return { denied: true, message: `Acción bloqueada por política de configuración: ${reason}` };
 }
 
 function formatError(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+    return error instanceof Error ? error.message : String(error);
 }
 
 function isResponseItem(item: unknown): item is { type: string } {
-  return typeof item === "object" && item !== null && "type" in item;
+    return typeof item === "object" && item !== null && "type" in item;
 }

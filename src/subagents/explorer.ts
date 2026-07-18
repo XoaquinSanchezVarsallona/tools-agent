@@ -1,5 +1,5 @@
 import type { ResponseInputItem } from "openai/resources/responses/responses";
-import { runAgentTurn, ToolCallLogEntry } from "../agent/harness";
+import { runAgentTurn, type ToolCallLogEntry } from "../agent/harness";
 import { AgentConfig } from "../policies/config";
 import {
     Source,
@@ -9,25 +9,6 @@ import {
     logProgress,
     recordSubagentResult
 } from "../agent/taskState";
-
-const EXPLORER_INSTRUCTIONS = `
-Sos el subagente Explorer dentro de un sistema multi-agente de coding.
-Tu única responsabilidad es ENTENDER el repositorio, no modificarlo.
-
-Usá list_files y read_file para averiguar:
-- estructura general de carpetas
-- arquitectura (ej: API REST, capas, dónde viven rutas/modelos/tests)
-- dependencias principales (leé package.json si existe)
-- convenciones de código que notes (naming, organización de archivos)
-- archivos que consideres relevantes para trabajar en el proyecto
-
-No tenés acceso a write_file ni run_command: no podés ni debés intentar modificar nada.
-Cuando tengas evidencia suficiente, respondé con un resumen claro y estructurado
-(usá secciones: Estructura, Arquitectura, Dependencias, Convenciones, Archivos relevantes).
-No inventes nada que no hayas leído con las tools.
-`.trim();
-
-const EXPLORER_ALLOWED_TOOLS = ["list_files", "read_file"] as const;
 
 export interface ExplorerOptions {
     config: AgentConfig;
@@ -51,10 +32,9 @@ Pedido original del usuario (para darte contexto de qué buscar): "${taskState.o
     let turnResult;
     try {
         turnResult = await runAgentTurn(prompt, conversation, {
+            mode: "explorer",
             config: options.config,
-            supervisionMode: false,
-            instructions: EXPLORER_INSTRUCTIONS,
-            allowedTools: [...EXPLORER_ALLOWED_TOOLS]
+            supervisionMode: false
         });
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);

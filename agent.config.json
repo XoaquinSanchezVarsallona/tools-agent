@@ -1,0 +1,6 @@
+{
+  "model": "gpt-5.2", "embeddingModel": "text-embedding-3-small", "maxIterations": 12, "conversationWindow": 40,
+  "paths": { "memory": ".agent-data/memory", "rag": ".agent-data/rag/vectors.json", "tasks": ".agent-data/tasks" },
+  "policies": { "deniedRead": [".env", "secrets/", ".pem"], "deniedWrite": [".git/", ".github/", "package-lock.json", ".env"], "deniedCommands": ["rm -rf", "git push", "git reset --hard", "format c:"], "approvalCommands": ["npm install", "npm i ", "git commit", "pip install"] },
+  "verificationCommands": ["npm test", "npm run build"], "loopDetection": { "repeatedActionLimit": 2, "replanLimit": 1 }, "langfuse": { "enabled": true }
+}
