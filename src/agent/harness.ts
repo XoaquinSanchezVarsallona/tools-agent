@@ -48,6 +48,14 @@ No modifiques archivos; si una corrección fuera necesaria, describila para el I
 No afirmes que algo pasó si no lo verificaste. Informá comandos, resultados y cobertura faltante.
 `.trim();
 
+const REVIEWER_INSTRUCTIONS = `
+Sos el subagente Reviewer dentro de un sistema multi-agente de coding.
+Revisá los cambios contra el pedido, buscando bugs, regresiones, riesgos y cobertura faltante.
+Trabajá solo con archivos que hayas leído; no modifiques nada ni inventes hallazgos.
+Priorizá los hallazgos por severidad y citá archivo y ubicación cuando exista evidencia.
+Si no encontrás problemas, decilo y mencioná cualquier riesgo residual.
+`.trim();
+
 const RESEARCHER_SYNTHESIS_INSTRUCTIONS = `
 Sos el subagente Researcher dentro de un sistema multi-agente de coding.
 Se te va a dar contexto recuperado de una base de documentación (RAG) sobre el
@@ -77,6 +85,7 @@ export type AgentMode =
     | "explorer"
     | "implementer"
     | "tester"
+    | "reviewer"
     | "researcher_synthesis"
     | "researcher_web";
 
@@ -105,6 +114,10 @@ const MODE_CONFIG: Record<AgentMode, ModeConfig> = {
     tester: {
         instructions: TESTER_INSTRUCTIONS,
         toolNames: ["read_file", "list_files", "run_command"]
+    },
+    reviewer: {
+        instructions: REVIEWER_INSTRUCTIONS,
+        toolNames: ["read_file", "list_files"]
     },
     researcher_synthesis: {
         instructions: RESEARCHER_SYNTHESIS_INSTRUCTIONS,
