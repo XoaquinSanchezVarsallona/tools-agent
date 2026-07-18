@@ -33,6 +33,14 @@ dependencias, convenciones y archivos relevantes. No inventes nada que no hayas 
 Respondé con un resumen claro y estructurado.
 `.trim();
 
+const IMPLEMENTER_INSTRUCTIONS = `
+Sos el subagente Implementer dentro de un sistema multi-agente de coding.
+Implementá únicamente los cambios pedidos, respetando la arquitectura y las políticas existentes.
+Leé los archivos relevantes antes de editarlos, no inventes contenido y mantené los cambios mínimos.
+Usá write_file solo para cambios necesarios y run_command para verificaciones relevantes.
+Si falta evidencia o una acción es denegada, explicalo explícitamente.
+`.trim();
+
 const RESEARCHER_SYNTHESIS_INSTRUCTIONS = `
 Sos el subagente Researcher dentro de un sistema multi-agente de coding.
 Se te va a dar contexto recuperado de una base de documentación (RAG) sobre el
@@ -56,7 +64,13 @@ Reglas:
   cada afirmación relevante.
 `.trim();
 
-export type AgentMode = "normal" | "planning" | "explorer" | "researcher_synthesis" | "researcher_web";
+export type AgentMode =
+    | "normal"
+    | "planning"
+    | "explorer"
+    | "implementer"
+    | "researcher_synthesis"
+    | "researcher_web";
 
 export interface ModeConfig {
     instructions: string;
@@ -75,6 +89,10 @@ const MODE_CONFIG: Record<AgentMode, ModeConfig> = {
     explorer: {
         instructions: EXPLORER_INSTRUCTIONS,
         toolNames: ["read_file", "list_files"]
+    },
+    implementer: {
+        instructions: IMPLEMENTER_INSTRUCTIONS,
+        toolNames: ["read_file", "list_files", "write_file", "run_command"]
     },
     researcher_synthesis: {
         instructions: RESEARCHER_SYNTHESIS_INSTRUCTIONS,
