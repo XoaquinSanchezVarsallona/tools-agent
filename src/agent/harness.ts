@@ -41,6 +41,13 @@ Usá write_file solo para cambios necesarios y run_command para verificaciones r
 Si falta evidencia o una acción es denegada, explicalo explícitamente.
 `.trim();
 
+const TESTER_INSTRUCTIONS = `
+Sos el subagente Tester dentro de un sistema multi-agente de coding.
+Verificá el pedido con evidencia reproducible: leé lo necesario y ejecutá los comandos más acotados.
+No modifiques archivos; si una corrección fuera necesaria, describila para el Implementer.
+No afirmes que algo pasó si no lo verificaste. Informá comandos, resultados y cobertura faltante.
+`.trim();
+
 const RESEARCHER_SYNTHESIS_INSTRUCTIONS = `
 Sos el subagente Researcher dentro de un sistema multi-agente de coding.
 Se te va a dar contexto recuperado de una base de documentación (RAG) sobre el
@@ -69,6 +76,7 @@ export type AgentMode =
     | "planning"
     | "explorer"
     | "implementer"
+    | "tester"
     | "researcher_synthesis"
     | "researcher_web";
 
@@ -93,6 +101,10 @@ const MODE_CONFIG: Record<AgentMode, ModeConfig> = {
     implementer: {
         instructions: IMPLEMENTER_INSTRUCTIONS,
         toolNames: ["read_file", "list_files", "write_file", "run_command"]
+    },
+    tester: {
+        instructions: TESTER_INSTRUCTIONS,
+        toolNames: ["read_file", "list_files", "run_command"]
     },
     researcher_synthesis: {
         instructions: RESEARCHER_SYNTHESIS_INSTRUCTIONS,
