@@ -33,7 +33,30 @@ dependencias, convenciones y archivos relevantes. No inventes nada que no hayas 
 Respondé con un resumen claro y estructurado.
 `.trim();
 
-export type AgentMode = "normal" | "planning" | "explorer";
+const RESEARCHER_SYNTHESIS_INSTRUCTIONS = `
+Sos el subagente Researcher dentro de un sistema multi-agente de coding.
+Se te va a dar contexto recuperado de una base de documentación (RAG) sobre el
+ecosistema TypeScript/Node. Tu trabajo es sintetizar una respuesta clara y
+concreta a la pregunta del usuario, basándote ÚNICAMENTE en ese contexto.
+No inventes nada que no esté en el contexto. Si el contexto no alcanza para
+responder algo puntual, decilo explícitamente en vez de completar con
+conocimiento propio.
+`.trim();
+
+const RESEARCHER_WEB_INSTRUCTIONS = `
+Sos el subagente Researcher dentro de un sistema multi-agente de coding.
+La documentación local (RAG) no tuvo evidencia suficiente para responder esta
+pregunta, así que tenés que usar la tool web_search como fallback.
+
+Reglas:
+- Priorizá siempre documentación oficial y fuentes técnicas confiables
+  por sobre blogs o foros.
+- No inventes: si buscás y no encontrás nada confiable, decilo.
+- Al terminar, sintetizá una respuesta concreta citando de qué fuente sale
+  cada afirmación relevante.
+`.trim();
+
+export type AgentMode = "normal" | "planning" | "explorer" | "researcher_synthesis" | "researcher_web";
 
 export interface ModeConfig {
     instructions: string;
@@ -52,6 +75,14 @@ const MODE_CONFIG: Record<AgentMode, ModeConfig> = {
     explorer: {
         instructions: EXPLORER_INSTRUCTIONS,
         toolNames: ["read_file", "list_files"]
+    },
+    researcher_synthesis: {
+        instructions: RESEARCHER_SYNTHESIS_INSTRUCTIONS,
+        toolNames: []
+    },
+    researcher_web: {
+        instructions: RESEARCHER_WEB_INSTRUCTIONS,
+        toolNames: ["web_search"]
     }
 };
 
@@ -61,6 +92,7 @@ export interface ToolCallLogEntry {
     tool: ToolName;
     args: unknown;
     outputSummary: string;
+    rawOutput: unknown;
     denied: boolean;
 }
 
@@ -93,8 +125,7 @@ export async function runAgentTurn(
 
     while (true) {
         iterations++;
-        const response = await createAgentResponse(conversation, modeConfig);
-        appendResponseOutput(conversation, response.output);
+        const response = await createAgentResponse(conversation, modeConfig, options);        appendResponseOutput(conversation, response.output);
         const toolCalls = findToolCalls(response.output);
 
         if (toolCalls.length === 0) {
@@ -109,10 +140,11 @@ export async function runAgentTurn(
 
 async function createAgentResponse(
     conversation: ResponseInputItem[],
-    modeConfig: ModeConfig
+    modeConfig: ModeConfig,
+    options: AgentOptions
 ) {
     return llm.responses.create({
-        model: "gpt-5.2",
+        model: options.config?.model ?? "gpt-5.2",
         instructions: modeConfig.instructions,
         input: conversation,
         tools: getToolDefinitions(modeConfig.toolNames)
@@ -137,22 +169,33 @@ async function handleToolCall(
         : defaultPolicyDecision(parsedCall.name, options);
 
     if (!decision.allowed) {
-        const summary = `denegado: ${decision.reason}`;
         appendToolOutput(conversation, toolCall.call_id, deniedToolOutput(decision.reason));
-        toolCallLog.push(logEntry(parsedCall.name, parsedCall.args, summary, true));
+        toolCallLog.push(
+            logEntry(
+                parsedCall.name,
+                parsedCall.args,
+                `denegado: ${decision.reason}`,
+                { denied: true, reason: decision.reason },
+                true
+            )
+        );
         return;
     }
 
     const approved = await requestApproval(parsedCall.name, parsedCall.args, decision, options);
     if (!approved) {
         appendToolOutput(conversation, toolCall.call_id, rejectedToolOutput());
-        toolCallLog.push(logEntry(parsedCall.name, parsedCall.args, "rechazado por el usuario", true));
+        toolCallLog.push(
+            logEntry(parsedCall.name, parsedCall.args, "rechazado por el usuario", { rejected: true }, true)
+        );
         return;
     }
 
     const output = await executeTool(parsedCall.name, parsedCall.args);
     appendToolOutput(conversation, toolCall.call_id, output);
-    toolCallLog.push(logEntry(parsedCall.name, parsedCall.args, summarizeOutput(output), false));
+    toolCallLog.push(
+        logEntry(parsedCall.name, parsedCall.args, summarizeOutput(output), output, false)
+    );
 }
 
 function parseToolCall(toolCall: ResponseFunctionToolCall, allowed: readonly ToolName[]) {
@@ -210,8 +253,14 @@ function defaultPolicyDecision(toolName: ToolName, options: AgentOptions): Polic
         : { allowed: true, requiresApproval: false };
 }
 
-function logEntry(tool: ToolName, args: unknown, outputSummary: string, denied: boolean) {
-    return { tool, args, outputSummary, denied } satisfies ToolCallLogEntry;
+function logEntry(
+    tool: ToolName,
+    args: unknown,
+    outputSummary: string,
+    rawOutput: unknown,
+    denied: boolean
+) {
+    return { tool, args, outputSummary, rawOutput, denied } satisfies ToolCallLogEntry;
 }
 
 function asToolArgs(args: unknown): Record<string, unknown> {

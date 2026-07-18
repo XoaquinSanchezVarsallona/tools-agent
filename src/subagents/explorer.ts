@@ -1,5 +1,5 @@
 import type { ResponseInputItem } from "openai/resources/responses/responses";
-import { runAgentTurn, type ToolCallLogEntry } from "../agent/harness";
+import { runAgentTurn, ToolCallLogEntry } from "../agent/harness";
 import { AgentConfig } from "../policies/config";
 import {
     Source,
@@ -23,7 +23,6 @@ export async function runExplorer(
     logProgress(taskState, "Explorer: iniciando exploración del repositorio.");
 
     const conversation: ResponseInputItem[] = [];
-
     const prompt = `
 Explorá el workspace ubicado en: ${options.workspace}
 Pedido original del usuario (para darte contexto de qué buscar): "${taskState.originalRequest}"

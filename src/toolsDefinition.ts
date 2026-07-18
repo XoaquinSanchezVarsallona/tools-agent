@@ -73,6 +73,22 @@ const toolDefinitionsByName: Record<ToolName, FunctionTool> = {
       required: ["command"],
       additionalProperties: false
     }
+  },
+  web_search: {
+    type: "function" as const,
+    name: "web_search",
+    description:
+        "Busca en la web información técnica cuando la documentación local (RAG) no es suficiente. Priorizar fuentes oficiales.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Consulta de búsqueda." },
+        maxResults: { type: "number", description: "Cantidad máxima de resultados (default 5)." }
+      },
+      required: ["query", "maxResults"],
+      additionalProperties: false
+    }
   }
 };
 

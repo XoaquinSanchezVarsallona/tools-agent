@@ -1,53 +1,62 @@
 import fs from "node:fs";
 import path from "node:path";
-import YAML from "yaml";
 
 export interface AgentConfig {
-    workspace: string;
-    permissions: {
-        read: { deny: string[] };
-        write: { deny: string[] };
+    model: string;
+    embeddingModel: string;
+    maxIterations: number;
+    conversationWindow: number;
+    paths: {
+        memory: string;
+        rag: string;
+        tasks: string;
     };
-    commands: {
-        deny: string[];
-        require_approval: string[];
+    policies: {
+        deniedRead: string[];
+        deniedWrite: string[];
+        deniedCommands: string[];
+        approvalCommands: string[];
     };
-    rag: {
-        topK: number;
-        minScore: number;
+    verificationCommands: string[];
+    loopDetection: {
+        repeatedActionLimit: number;
+        replanLimit: number;
     };
-    observability: {
-        provider: string;
+    langfuse: {
         enabled: boolean;
     };
 }
 
 const DEFAULT_CONFIG: AgentConfig = {
-    workspace: ".",
-    permissions: {
-        read: { deny: [] },
-        write: { deny: [] }
+    model: "gpt-5.2",
+    embeddingModel: "text-embedding-3-small",
+    maxIterations: 12,
+    conversationWindow: 40,
+    paths: {
+        memory: ".agent-data/memory",
+        rag: ".agent-data/rag/vectors.json",
+        tasks: ".agent-data/tasks"
     },
-    commands: {
-        deny: [],
-        require_approval: []
+    policies: {
+        deniedRead: [],
+        deniedWrite: [],
+        deniedCommands: [],
+        approvalCommands: []
     },
-    rag: { topK: 5, minScore: 0.5 },
-    observability: { provider: "none", enabled: false }
+    verificationCommands: [],
+    loopDetection: { repeatedActionLimit: 2, replanLimit: 1 },
+    langfuse: { enabled: false }
 };
 
 export function loadAgentConfig(configPath: string): AgentConfig {
     const resolved = path.resolve(configPath);
 
     if (!fs.existsSync(resolved)) {
-        throw new Error(
-            `No se encontró el archivo de configuración en ${resolved}. ` +
-            `Copiá agent.config.example.yaml a agent.config.yaml y ajustalo.`
-        );
+        throw new Error(`No se encontró el archivo de configuración en ${resolved}.`);
     }
 
     const raw = fs.readFileSync(resolved, "utf-8");
-    const parsed = YAML.parse(raw) as Partial<AgentConfig>;
+    const parsed = JSON.parse(raw) as Partial<AgentConfig>;
 
     return validateAndMerge(parsed, resolved);
 }
@@ -55,24 +64,17 @@ export function loadAgentConfig(configPath: string): AgentConfig {
 function validateAndMerge(parsed: Partial<AgentConfig>, sourcePath: string): AgentConfig {
     const errors: string[] = [];
 
-    if (parsed.workspace !== undefined && typeof parsed.workspace !== "string") {
-        errors.push("workspace debe ser un string.");
+    if (parsed.policies?.deniedRead && !Array.isArray(parsed.policies.deniedRead)) {
+        errors.push("policies.deniedRead debe ser un array de strings.");
     }
-
-    if (parsed.permissions?.read?.deny && !Array.isArray(parsed.permissions.read.deny)) {
-        errors.push("permissions.read.deny debe ser un array de strings.");
+    if (parsed.policies?.deniedWrite && !Array.isArray(parsed.policies.deniedWrite)) {
+        errors.push("policies.deniedWrite debe ser un array de strings.");
     }
-
-    if (parsed.permissions?.write?.deny && !Array.isArray(parsed.permissions.write.deny)) {
-        errors.push("permissions.write.deny debe ser un array de strings.");
+    if (parsed.policies?.deniedCommands && !Array.isArray(parsed.policies.deniedCommands)) {
+        errors.push("policies.deniedCommands debe ser un array de strings.");
     }
-
-    if (parsed.commands?.deny && !Array.isArray(parsed.commands.deny)) {
-        errors.push("commands.deny debe ser un array de strings.");
-    }
-
-    if (parsed.commands?.require_approval && !Array.isArray(parsed.commands.require_approval)) {
-        errors.push("commands.require_approval debe ser un array de strings.");
+    if (parsed.policies?.approvalCommands && !Array.isArray(parsed.policies.approvalCommands)) {
+        errors.push("policies.approvalCommands debe ser un array de strings.");
     }
 
     if (errors.length > 0) {
@@ -82,23 +84,29 @@ function validateAndMerge(parsed: Partial<AgentConfig>, sourcePath: string): Age
     }
 
     return {
-        workspace: parsed.workspace ?? DEFAULT_CONFIG.workspace,
-        permissions: {
-            read: { deny: parsed.permissions?.read?.deny ?? DEFAULT_CONFIG.permissions.read.deny },
-            write: { deny: parsed.permissions?.write?.deny ?? DEFAULT_CONFIG.permissions.write.deny }
+        model: parsed.model ?? DEFAULT_CONFIG.model,
+        embeddingModel: parsed.embeddingModel ?? DEFAULT_CONFIG.embeddingModel,
+        maxIterations: parsed.maxIterations ?? DEFAULT_CONFIG.maxIterations,
+        conversationWindow: parsed.conversationWindow ?? DEFAULT_CONFIG.conversationWindow,
+        paths: {
+            memory: parsed.paths?.memory ?? DEFAULT_CONFIG.paths.memory,
+            rag: parsed.paths?.rag ?? DEFAULT_CONFIG.paths.rag,
+            tasks: parsed.paths?.tasks ?? DEFAULT_CONFIG.paths.tasks
         },
-        commands: {
-            deny: parsed.commands?.deny ?? DEFAULT_CONFIG.commands.deny,
-            require_approval:
-                parsed.commands?.require_approval ?? DEFAULT_CONFIG.commands.require_approval
+        policies: {
+            deniedRead: parsed.policies?.deniedRead ?? DEFAULT_CONFIG.policies.deniedRead,
+            deniedWrite: parsed.policies?.deniedWrite ?? DEFAULT_CONFIG.policies.deniedWrite,
+            deniedCommands: parsed.policies?.deniedCommands ?? DEFAULT_CONFIG.policies.deniedCommands,
+            approvalCommands: parsed.policies?.approvalCommands ?? DEFAULT_CONFIG.policies.approvalCommands
         },
-        rag: {
-            topK: parsed.rag?.topK ?? DEFAULT_CONFIG.rag.topK,
-            minScore: parsed.rag?.minScore ?? DEFAULT_CONFIG.rag.minScore
+        verificationCommands: parsed.verificationCommands ?? DEFAULT_CONFIG.verificationCommands,
+        loopDetection: {
+            repeatedActionLimit:
+                parsed.loopDetection?.repeatedActionLimit ?? DEFAULT_CONFIG.loopDetection.repeatedActionLimit,
+            replanLimit: parsed.loopDetection?.replanLimit ?? DEFAULT_CONFIG.loopDetection.replanLimit
         },
-        observability: {
-            provider: parsed.observability?.provider ?? DEFAULT_CONFIG.observability.provider,
-            enabled: parsed.observability?.enabled ?? DEFAULT_CONFIG.observability.enabled
+        langfuse: {
+            enabled: parsed.langfuse?.enabled ?? DEFAULT_CONFIG.langfuse.enabled
         }
     };
 }

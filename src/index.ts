@@ -5,7 +5,8 @@ import { loadAgentConfig } from "./policies/config";
 
 const rl = readline.createInterface({ input, output });
 const conversation: any[] = [];
-const config = loadAgentConfig(process.env.AGENT_CONFIG_PATH ?? "./agent.config.yaml");
+const config = loadAgentConfig(process.env.AGENT_CONFIG_PATH ?? "./agent.config.json");
+const WORKSPACE = process.env.AGENT_WORKSPACE ?? "./fixture-user-api";
 
 type CommandResult = "handled" | "exit" | "not-command";
 const state = { mode: "normal" as AgentMode, supervisionMode: true };
@@ -18,7 +19,7 @@ async function confirmAction(message: string): Promise<boolean> {
 
 function printHelp() {
     console.log("Coding Agent iniciado.");
-    console.log(`Workspace: ${config.workspace}`);
+    console.log(`Workspace: ${WORKSPACE}`);
     console.log("Comandos:\n/plan on\n/plan off\n/supervision on\n/supervision off\n/exit");
 }
 

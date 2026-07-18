@@ -14,44 +14,43 @@ export function validateToolCall(
 ): PolicyDecision {
     switch (toolName) {
         case "read_file":
+        case "list_files":
             return checkReadPolicy(config, String(args.path ?? ""));
         case "write_file":
             return checkWritePolicy(config, String(args.path ?? ""));
         case "run_command":
             return checkCommandPolicy(config, String(args.command ?? ""));
-        case "list_files":
-            return checkReadPolicy(config, String(args.path ?? ""));
         default:
             return { allowed: true, requiresApproval: false };
     }
 }
 
 function checkReadPolicy(config: AgentConfig, targetPath: string): PolicyDecision {
-    const denied = matchesAnyPattern(targetPath, config.permissions.read.deny);
+    const denied = matchesAnyPattern(targetPath, config.policies.deniedRead);
     if (denied) {
         return {
             allowed: false,
             requiresApproval: false,
-            reason: `Lectura denegada por política: "${targetPath}" matchea un patrón prohibido (${denied}).`
+            reason: `Lectura denegada por política: "${targetPath}" matchea "${denied}".`
         };
     }
     return { allowed: true, requiresApproval: false };
 }
 
 function checkWritePolicy(config: AgentConfig, targetPath: string): PolicyDecision {
-    const denied = matchesAnyPattern(targetPath, config.permissions.write.deny);
+    const denied = matchesAnyPattern(targetPath, config.policies.deniedWrite);
     if (denied) {
         return {
             allowed: false,
             requiresApproval: false,
-            reason: `Escritura denegada por política: "${targetPath}" matchea un patrón prohibido (${denied}).`
+            reason: `Escritura denegada por política: "${targetPath}" matchea "${denied}".`
         };
     }
     return { allowed: true, requiresApproval: false };
 }
 
 function checkCommandPolicy(config: AgentConfig, command: string): PolicyDecision {
-    const deniedMatch = config.commands.deny.find((pattern) => command.includes(pattern));
+    const deniedMatch = config.policies.deniedCommands.find((pattern) => command.includes(pattern));
     if (deniedMatch) {
         return {
             allowed: false,
@@ -60,9 +59,7 @@ function checkCommandPolicy(config: AgentConfig, command: string): PolicyDecisio
         };
     }
 
-    const approvalMatch = config.commands.require_approval.find((pattern) =>
-        command.includes(pattern)
-    );
+    const approvalMatch = config.policies.approvalCommands.find((pattern) => command.includes(pattern));
     if (approvalMatch) {
         return {
             allowed: true,
