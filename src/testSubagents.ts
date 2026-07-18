@@ -3,6 +3,9 @@ import { loadAgentConfig } from "./policies/config";
 import { createTaskState, summarizeForPrompt } from "./agent/taskState";
 import { runExplorer } from "./subagents/explorer";
 import { runResearcher } from "./subagents/researcher";
+import { runImplementer } from "./subagents/implementer";
+import { runTester } from "./subagents/tester";
+import { runReviewer } from "./subagents/reviewer";
 
 const WORKSPACE = process.env.AGENT_WORKSPACE ?? "./fixture-user-api";
 
@@ -32,6 +35,29 @@ async function main() {
     console.log(researcherRagResult.summary);
     console.log(`\nFuentes: ${researcherRagResult.sources.length}`);
     researcherRagResult.sources.forEach((s) => console.log(`  - [${s.type}] ${s.ref}`));
+
+    console.log("\n\n=== Corriendo Implementer ===");
+    const implementerResult = await runImplementer(taskState, {
+        config,
+        workspace: WORKSPACE,
+        supervisionMode: true,
+        confirmAction: async (message) => {
+            console.log(`Acción omitida por el demo supervisado:\n${message}`);
+            return false;
+        }
+    });
+    console.log("\n--- Resultado del Implementer ---");
+    console.log(implementerResult.summary);
+
+    console.log("\n\n=== Corriendo Tester ===");
+    const testerResult = await runTester(taskState, { config, workspace: WORKSPACE });
+    console.log("\n--- Resultado del Tester ---");
+    console.log(testerResult.summary);
+
+    console.log("\n\n=== Corriendo Reviewer ===");
+    const reviewerResult = await runReviewer(taskState, { config, workspace: WORKSPACE });
+    console.log("\n--- Resultado del Reviewer ---");
+    console.log(reviewerResult.summary);
 
     console.log("\n\n=== Resumen final del TaskState ===");
     console.log(summarizeForPrompt(taskState));
