@@ -51,6 +51,7 @@ export interface TaskState {
     filesModified: string[];
     observations: Observation[];
     recentActions: RecentAction[];
+    replanCount: number;
 }
 
 export interface RecentAction {
@@ -73,7 +74,8 @@ export function createTaskState(originalRequest: string): TaskState {
         sourcesConsulted: [],
         filesModified: [],
         observations: [],
-        recentActions: []
+        recentActions: [],
+        replanCount: 0
     };
 }
 
@@ -119,6 +121,11 @@ export function recordAction(
     if (state.recentActions.length > 20) {
         state.recentActions.shift();
     }
+    state.updatedAt = new Date().toISOString();
+}
+
+export function incrementReplanCount(state: TaskState): void {
+    state.replanCount += 1;
     state.updatedAt = new Date().toISOString();
 }
 

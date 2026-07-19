@@ -38,7 +38,8 @@ ${summarizeForPrompt(taskState)}
             mode: "tester",
             config: options.config,
             supervisionMode: options.supervisionMode ?? false,
-            confirmAction: options.confirmAction
+            confirmAction: options.confirmAction,
+            taskState
         });
         const sources = repositorySourcesFromToolLog(turnResult.toolCallLog);
         const failedCommands = commandFailures(turnResult.toolCallLog);

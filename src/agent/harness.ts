@@ -7,6 +7,8 @@ import type { AgentConfig } from "../policies/config";
 import { validateToolCall, type PolicyDecision } from "../policies/validate";
 import { toolRegistry, type ToolName } from "../tools/index";
 import { getToolDefinitions } from "../toolsDefinition";
+import { checkForLoop, fingerprintArgs, handleLoopDetected } from "./loopDetector";
+import { recordAction, type TaskState } from "./taskState";
 
 const AGENT_INSTRUCTIONS = `
 Sos un coding agent.
@@ -159,6 +161,7 @@ const MODE_CONFIG: Record<AgentMode, ModeConfig> = {
 };
 
 const SYSTEM_MODIFYING_TOOLS = new Set<ToolName>(["write_file", "run_command"]);
+const DEFAULT_MAX_ITERATIONS = 12;
 
 export interface ToolCallLogEntry {
     tool: ToolName;
@@ -173,12 +176,16 @@ export interface AgentOptions {
     config?: AgentConfig;
     supervisionMode: boolean;
     confirmAction?: (message: string) => Promise<boolean>;
+    /** Si se pasa, habilita el registro de acciones y la detección de loops. */
+    taskState?: TaskState;
 }
 
 export interface AgentTurnResult {
     finalText: string;
     iterations: number;
     toolCallLog: ToolCallLogEntry[];
+    stoppedDueToLoop?: boolean;
+    stoppedDueToMaxIterations?: boolean;
 }
 
 export function getModeConfig(mode: AgentMode): ModeConfig {
@@ -192,11 +199,25 @@ export async function runAgentTurn(
 ): Promise<AgentTurnResult> {
     const modeConfig = getModeConfig(options.mode);
     const toolCallLog: ToolCallLogEntry[] = [];
+    const maxIterations = options.config?.maxIterations ?? DEFAULT_MAX_ITERATIONS;
     addUserMessage(conversation, userMessage);
     let iterations = 0;
 
     while (true) {
         iterations++;
+
+        if (iterations > maxIterations) {
+            return {
+                finalText:
+                    `No puedo continuar: se alcanzó el máximo de ${maxIterations} iteraciones ` +
+                    `sin llegar a una respuesta final. Esto puede indicar que la tarea es demasiado ` +
+                    `compleja para resolver en un solo turno, o que hace falta más contexto.`,
+                iterations,
+                toolCallLog,
+                stoppedDueToMaxIterations: true
+            };
+        }
+
         const response = await createAgentResponse(conversation, modeConfig, options);
         appendResponseOutput(conversation, response.output);
         const toolCalls = findToolCalls(response.output);
@@ -207,6 +228,26 @@ export async function runAgentTurn(
 
         for (const toolCall of toolCalls) {
             await handleToolCall(toolCall, conversation, options, modeConfig, toolCallLog);
+        }
+
+        if (options.taskState && options.config) {
+            const loopCheck = checkForLoop(options.taskState, options.config);
+            if (loopCheck.looping) {
+                const handled = handleLoopDetected(
+                    options.taskState,
+                    options.config,
+                    conversation,
+                    loopCheck.reason ?? "Se detectó una acción repetida sin avance."
+                );
+                if (handled.shouldStop) {
+                    return {
+                        finalText: handled.stopMessage,
+                        iterations,
+                        toolCallLog,
+                        stoppedDueToLoop: true
+                    };
+                }
+            }
         }
     }
 }
@@ -243,32 +284,38 @@ async function handleToolCall(
 
     if (!decision.allowed) {
         appendToolOutput(conversation, toolCall.call_id, deniedToolOutput(decision.reason));
+        const summary = `denegado: ${decision.reason}`;
         toolCallLog.push(
-            logEntry(
-                parsedCall.name,
-                parsedCall.args,
-                `denegado: ${decision.reason}`,
-                { denied: true, reason: decision.reason },
-                true
-            )
+            logEntry(parsedCall.name, parsedCall.args, summary, { denied: true, reason: decision.reason }, true)
         );
+        recordActionIfTracking(options, parsedCall.name, parsedCall.args, summary);
         return;
     }
 
     const approved = await requestApproval(parsedCall.name, parsedCall.args, decision, options);
     if (!approved) {
         appendToolOutput(conversation, toolCall.call_id, rejectedToolOutput());
-        toolCallLog.push(
-            logEntry(parsedCall.name, parsedCall.args, "rechazado por el usuario", { rejected: true }, true)
-        );
+        const summary = "rechazado por el usuario";
+        toolCallLog.push(logEntry(parsedCall.name, parsedCall.args, summary, { rejected: true }, true));
+        recordActionIfTracking(options, parsedCall.name, parsedCall.args, summary);
         return;
     }
 
     const output = await executeTool(parsedCall.name, parsedCall.args);
     appendToolOutput(conversation, toolCall.call_id, output);
-    toolCallLog.push(
-        logEntry(parsedCall.name, parsedCall.args, summarizeOutput(output), output, false)
-    );
+    const summary = summarizeOutput(output);
+    toolCallLog.push(logEntry(parsedCall.name, parsedCall.args, summary, output, false));
+    recordActionIfTracking(options, parsedCall.name, parsedCall.args, summary);
+}
+
+function recordActionIfTracking(
+    options: AgentOptions,
+    tool: ToolName,
+    args: unknown,
+    outcomeSummary: string
+) {
+    if (!options.taskState) return;
+    recordAction(options.taskState, tool, fingerprintArgs(args), outcomeSummary);
 }
 
 function parseToolCall(toolCall: ResponseFunctionToolCall, allowed: readonly ToolName[]) {

@@ -107,7 +107,8 @@ async function researchFromWeb(
         turnResult = await runAgentTurn(query, conversation, {
             mode: "researcher_web",
             config: options.config,
-            supervisionMode: false
+            supervisionMode: false,
+            taskState
         });
     } catch (error: unknown) {
         return failResult(taskState, startedAt, error);

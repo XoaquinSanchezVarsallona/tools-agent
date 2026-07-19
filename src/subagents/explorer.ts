@@ -35,7 +35,8 @@ Pedido original del usuario (para darte contexto de qué buscar): "${taskState.o
         turnResult = await runAgentTurn(prompt, conversation, {
             mode: "explorer",
             config: options.config,
-            supervisionMode: false
+            supervisionMode: false,
+            taskState
         });
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
