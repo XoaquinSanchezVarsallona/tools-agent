@@ -1,0 +1,241 @@
+/*
+  FrivButton
+  - Early-2000s glossy "web game" style: bold outline, shiny highlight, chunky shadow.
+  - Keeps accessibility: focus-visible ring, adequate sizing, clear disabled & loading states.
+*/
+
+.FrivButton {
+  --fb-bg1: #ff4fd8;
+  --fb-bg2: #ff2bbf;
+  --fb-bg3: #c800a3;
+  --fb-outline: #5d0a5a;
+  --fb-shadow: rgba(0, 0, 0, 0.35);
+  --fb-text: #ffffff;
+
+  --fb-radius: 14px;
+  --fb-height: 44px;
+  --fb-pad-x: 16px;
+  --fb-font: 800;
+  --fb-font-size: 16px;
+  --fb-letter: 0.2px;
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-height: var(--fb-height);
+  padding: 0 var(--fb-pad-x);
+  border-radius: var(--fb-radius);
+
+  border: 3px solid var(--fb-outline);
+  background: linear-gradient(180deg, var(--fb-bg1) 0%, var(--fb-bg2) 45%, var(--fb-bg3) 100%);
+
+  color: var(--fb-text);
+  font-weight: var(--fb-font);
+  font-size: var(--fb-font-size);
+  letter-spacing: var(--fb-letter);
+
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+
+  box-shadow:
+    0 10px 0 rgba(0, 0, 0, 0.18),
+    0 14px 18px var(--fb-shadow);
+
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.35),
+    0 0 10px rgba(255, 255, 255, 0.18);
+
+  transform: translateY(0);
+  transition: transform 120ms ease, filter 140ms ease, box-shadow 140ms ease;
+}
+
+.FrivButton::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: calc(var(--fb-radius) - 4px);
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+
+.FrivButton__shine {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  right: 6px;
+  height: 46%;
+  border-radius: calc(var(--fb-radius) - 6px);
+  background: radial-gradient(ellipse at 30% 20%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.35) 35%, rgba(255, 255, 255, 0.0) 72%);
+  filter: blur(0.1px);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.FrivButton__content {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  line-height: 1;
+}
+
+.FrivButton__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.FrivButton__icon > svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.FrivButton__label {
+  position: relative;
+  white-space: nowrap;
+}
+
+/* Subtle "sticker" outline effect for the label */
+.FrivButton__label::after {
+  content: attr(data-label);
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: -1;
+  -webkit-text-stroke: 4px rgba(0, 0, 0, 0.22);
+  text-stroke: 4px rgba(0, 0, 0, 0.22);
+  paint-order: stroke fill;
+  filter: blur(0.1px);
+}
+
+.FrivButton:hover {
+  filter: saturate(1.08) brightness(1.03);
+}
+
+.FrivButton:active {
+  transform: translateY(6px);
+  box-shadow:
+    0 4px 0 rgba(0, 0, 0, 0.18),
+    0 8px 12px var(--fb-shadow);
+}
+
+.FrivButton:focus {
+  outline: none;
+}
+
+.FrivButton:focus-visible {
+  box-shadow:
+    0 10px 0 rgba(0, 0, 0, 0.18),
+    0 14px 18px var(--fb-shadow),
+    0 0 0 4px rgba(255, 255, 255, 0.55),
+    0 0 0 7px rgba(0, 0, 0, 0.35);
+}
+
+.FrivButton.is-disabled,
+.FrivButton:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.25) saturate(0.75) brightness(0.95);
+  opacity: 0.75;
+}
+
+.FrivButton.is-disabled:active,
+.FrivButton:disabled:active {
+  transform: translateY(0);
+  box-shadow:
+    0 10px 0 rgba(0, 0, 0, 0.18),
+    0 14px 18px var(--fb-shadow);
+}
+
+/* Loading spinner (keeps label stable) */
+.FrivButton__spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 3px solid rgba(255, 255, 255, 0.55);
+  border-top-color: rgba(255, 255, 255, 0.0);
+  border-right-color: rgba(255, 255, 255, 0.85);
+  animation: fb-spin 700ms linear infinite;
+}
+
+@keyframes fb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Sizes */
+.FrivButton--sm {
+  --fb-height: 36px;
+  --fb-pad-x: 12px;
+  --fb-radius: 12px;
+  --fb-font-size: 14px;
+}
+
+.FrivButton--md {
+  --fb-height: 44px;
+  --fb-pad-x: 16px;
+  --fb-radius: 14px;
+  --fb-font-size: 16px;
+}
+
+.FrivButton--lg {
+  --fb-height: 54px;
+  --fb-pad-x: 20px;
+  --fb-radius: 16px;
+  --fb-font-size: 18px;
+}
+
+/* Tones */
+.FrivButton--pink {
+  --fb-bg1: #ff66e3;
+  --fb-bg2: #ff2bc6;
+  --fb-bg3: #c700a4;
+  --fb-outline: #5d0a5a;
+}
+
+.FrivButton--blue {
+  --fb-bg1: #57d8ff;
+  --fb-bg2: #12b8ff;
+  --fb-bg3: #0076d1;
+  --fb-outline: #0b2b55;
+}
+
+.FrivButton--green {
+  --fb-bg1: #7dff6b;
+  --fb-bg2: #2eea48;
+  --fb-bg3: #0aa82a;
+  --fb-outline: #0b4b1f;
+}
+
+.FrivButton--yellow {
+  --fb-bg1: #fff07a;
+  --fb-bg2: #ffd22e;
+  --fb-bg3: #f08a00;
+  --fb-outline: #5c3b06;
+  --fb-text: #2b1400;
+  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.35);
+}
+
+.FrivButton--purple {
+  --fb-bg1: #c08bff;
+  --fb-bg2: #9b4dff;
+  --fb-bg3: #5d1fd1;
+  --fb-outline: #2b0b55;
+}
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  .FrivButton {
+    transition: none;
+  }
+  .FrivButton__spinner {
+    animation: none;
+  }
+}

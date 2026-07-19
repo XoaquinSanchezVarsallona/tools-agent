@@ -34,10 +34,11 @@ Primero genera el indice local del RAG:
 npm run rag:ingest
 ```
 
-Ejecuta la prueba del componente `Button`:
+Pedile cualquier componente en lenguaje natural, el agente infiere el nombre (PascalCase):
 
 ```bash
 npm run agent -- "Genera un boton para una aplicacion financiera"
+npm run agent -- "Genera una card de videojuego estilo Friv anos 2000"
 ```
 
 La ejecucion hace este flujo:
@@ -45,7 +46,7 @@ La ejecucion hace este flujo:
 ```text
 pedido del usuario
 -> recuperacion de documentos del RAG
--> generacion de Button.tsx, Button.css y Button.stories.tsx
+-> el modelo infiere componentName (ej. GameCard) y genera {componentName}.tsx, .css y .stories.tsx
 -> build de Storybook
 -> traza en Langfuse
 -> resumen final con fuentes utilizadas
@@ -54,7 +55,7 @@ pedido del usuario
 Los archivos generados quedan en:
 
 ```text
-src/components/generated/Button/
+src/components/generated/{componentName}/
 ```
 
 ## Storybook

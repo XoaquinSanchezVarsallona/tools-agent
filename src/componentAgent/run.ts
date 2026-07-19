@@ -80,9 +80,12 @@ async function main() {
 
         const generatedFiles = await agentStep(agent, "write-generated-files", async (step) => {
           step.update({
-            input: generation.files.map((file) => file.path)
+            input: {
+              componentName: generation.componentName,
+              files: generation.files.map((file) => file.path)
+            }
           } as any);
-          const written = await writeGeneratedFiles(generation.files);
+          const written = await writeGeneratedFiles(generation.files, generation.componentName);
           step.update({ output: { written } } as any);
           return written;
         });

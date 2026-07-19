@@ -2,16 +2,14 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { GeneratedFile } from "./generator";
 
-const GENERATED_BUTTON_DIR = path.resolve("src/components/generated/Button");
-const EXPECTED_FILES = [
-  "src/components/generated/Button/Button.tsx",
-  "src/components/generated/Button/Button.css",
-  "src/components/generated/Button/Button.stories.tsx"
-];
+const GENERATED_ROOT = path.resolve("src/components/generated");
+const COMPONENT_NAME_PATTERN = /^[A-Z][A-Za-z0-9]*$/;
 
-export async function writeGeneratedFiles(files: GeneratedFile[]) {
-  validateGeneratedFiles(files);
-  await fs.mkdir(GENERATED_BUTTON_DIR, { recursive: true });
+export async function writeGeneratedFiles(files: GeneratedFile[], componentName: string) {
+  validateGeneratedFiles(files, componentName);
+
+  const componentDir = path.join(GENERATED_ROOT, componentName);
+  await fs.mkdir(componentDir, { recursive: true });
 
   for (const file of files) {
     await fs.writeFile(path.resolve(file.path), file.content, "utf-8");
@@ -20,9 +18,19 @@ export async function writeGeneratedFiles(files: GeneratedFile[]) {
   return files.map((file) => file.path);
 }
 
-function validateGeneratedFiles(files: GeneratedFile[]) {
+function validateGeneratedFiles(files: GeneratedFile[], componentName: string) {
+  if (!COMPONENT_NAME_PATTERN.test(componentName)) {
+    throw new Error(`Invalid component name: ${componentName}`);
+  }
+
+  const componentDir = path.join(GENERATED_ROOT, componentName);
+  const expected = [
+    `src/components/generated/${componentName}/${componentName}.tsx`,
+    `src/components/generated/${componentName}/${componentName}.css`,
+    `src/components/generated/${componentName}/${componentName}.stories.tsx`
+  ].sort();
+
   const paths = files.map((file) => normalizePath(file.path)).sort();
-  const expected = [...EXPECTED_FILES].sort();
 
   if (paths.length !== expected.length) {
     throw new Error(`Expected ${expected.length} generated files, got ${paths.length}`);
@@ -36,8 +44,8 @@ function validateGeneratedFiles(files: GeneratedFile[]) {
 
   for (const file of files) {
     const resolvedPath = path.resolve(file.path);
-    if (!resolvedPath.startsWith(`${GENERATED_BUTTON_DIR}${path.sep}`)) {
-      throw new Error(`Generated path is outside Button directory: ${file.path}`);
+    if (!resolvedPath.startsWith(`${componentDir}${path.sep}`)) {
+      throw new Error(`Generated path is outside component directory: ${file.path}`);
     }
     if (typeof file.content !== "string" || file.content.trim() === "") {
       throw new Error(`Generated file has empty content: ${file.path}`);
