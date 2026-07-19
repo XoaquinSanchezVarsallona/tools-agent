@@ -1,4 +1,0 @@
-import fs from "node:fs/promises"; import path from "node:path";
-export interface SourceDefinition { type: "file" | "url"; value: string; }
-export async function loadSources(root: string, definitions: SourceDefinition[]) { return Promise.all(definitions.map(async (definition) => { if (definition.type === "url") { const response = await fetch(definition.value); if (!response.ok) throw new Error(`No se pudo descargar ${definition.value}: ${response.status}`); return { source: definition.value, content: await response.text() }; } return { source: definition.value, content: await fs.readFile(path.resolve(root, definition.value), "utf8") }; })); }
-export async function readSourceManifest(root: string) { return JSON.parse(await fs.readFile(path.join(root, "rag.sources.json"), "utf8")) as SourceDefinition[]; }

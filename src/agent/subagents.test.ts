@@ -1,2 +1,0 @@
-import test from "node:test"; import assert from "node:assert/strict"; import { SUBAGENT_INSTRUCTIONS, SUBAGENT_ORDER } from "./subagents";
-test("test orchestration defines every required role in order", () => { assert.deepEqual(SUBAGENT_ORDER, ["explorer", "researcher", "implementer", "tester", "reviewer"]); for (const role of SUBAGENT_ORDER) assert.ok(SUBAGENT_INSTRUCTIONS[role].length > 20); });

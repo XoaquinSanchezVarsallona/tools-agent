@@ -1,6 +1,0 @@
-import path from "node:path";
-import type { AgentConfig } from "../domain/types";
-export type ToolEffect = "read" | "write" | "command" | "network" | "memory";
-export class PolicyException extends Error {}
-function matches(value: string, patterns: string[]) { const normalized = value.replaceAll("\\", "/").toLowerCase(); return patterns.some((pattern) => normalized.includes(pattern.replaceAll("\\", "/").toLowerCase().replaceAll("**", "").replaceAll("*", ""))); }
-export class PolicyService { constructor(private readonly root: string, private readonly config: AgentConfig["policies"]) {} validatePath(target: string, effect: "read" | "write") { const resolved = path.resolve(this.root, target); const relative = path.relative(path.resolve(this.root), resolved); if (relative.startsWith("..") || path.isAbsolute(relative)) throw new PolicyException(`Path fuera del proyecto: ${target}`); if (matches(relative, effect === "read" ? this.config.deniedRead : this.config.deniedWrite)) throw new PolicyException(`${effect} denegada por política: ${target}`); return resolved; } commandPolicy(command: string) { if (matches(command, this.config.deniedCommands)) throw new PolicyException(`Comando prohibido: ${command}`); return { requiresApproval: matches(command, this.config.approvalCommands) }; } }

@@ -1,6 +1,0 @@
-[
-  { "type": "file", "value": "AGENTS.md" },
-  { "type": "url", "value": "https://www.typescriptlang.org/docs/handbook/intro.html" },
-  { "type": "url", "value": "https://nodejs.org/api/test.html" },
-  { "type": "url", "value": "https://developers.openai.com/api/docs/guides/function-calling" }
-]
