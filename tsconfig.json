@@ -8,9 +8,10 @@
     "strict": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["node"],
-    "outDir": "dist"
-    ,
+    "outDir": "dist",
     "rootDir": "src"
   },
   "include": ["src"]
