@@ -1,6 +1,7 @@
 import { minimatch } from "minimatch";
 import path from "node:path";
 import { AgentConfig } from "./config";
+import { getDiscoveredPlugins } from "../tools/index";
 
 export type PolicyDecision =
     | { allowed: true; requiresApproval: false }
@@ -21,8 +22,20 @@ export function validateToolCall(
         case "run_command":
             return checkCommandPolicy(config, String(args.command ?? ""));
         default:
-            return { allowed: true, requiresApproval: false };
+            return checkPluginPolicy(toolName);
     }
+}
+
+function checkPluginPolicy(toolName: string): PolicyDecision {
+    const plugin = getDiscoveredPlugins().get(toolName);
+    if (plugin?.policy?.requiresApproval) {
+        return {
+            allowed: true,
+            requiresApproval: true,
+            reason: `La tool "${toolName}" está marcada por su plugin como que requiere aprobación.`
+        };
+    }
+    return { allowed: true, requiresApproval: false };
 }
 
 function checkReadPolicy(config: AgentConfig, targetPath: string): PolicyDecision {

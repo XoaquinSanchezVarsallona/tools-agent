@@ -158,7 +158,7 @@ export interface ModeConfig {
 const MODE_CONFIG: Record<AgentMode, ModeConfig> = {
     normal: {
         instructions: AGENT_INSTRUCTIONS,
-        toolNames: ["read_file", "list_files", "write_file", "run_command"]
+        toolNames: ["read_file", "list_files", "write_file", "run_command", "get_current_time"]
     },
     planning: {
         instructions: PLANNING_INSTRUCTIONS,

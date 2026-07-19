@@ -1,7 +1,8 @@
 import type { FunctionTool } from "openai/resources/responses/responses";
 import type { ToolName } from "./tools/index";
+import { getDiscoveredPlugins } from "./tools/index";
 
-const toolDefinitionsByName: Record<ToolName, FunctionTool> = {
+const toolDefinitionsByName: Record<string, FunctionTool> = {
   read_file: {
     type: "function" as const,
     name: "read_file",
@@ -92,6 +93,26 @@ const toolDefinitionsByName: Record<ToolName, FunctionTool> = {
   }
 };
 
-export function getToolDefinitions(toolNames: readonly ToolName[]) {
-  return toolNames.map((toolName) => toolDefinitionsByName[toolName]);
+export function getToolDefinitions(toolNames: readonly ToolName[]): FunctionTool[] {
+  const plugins = getDiscoveredPlugins();
+
+  return toolNames.map((toolName): FunctionTool => {
+    const builtIn = toolDefinitionsByName[toolName];
+    if (builtIn) return builtIn;
+
+    const plugin = plugins.get(toolName);
+    if (plugin) {
+      return {
+        type: "function" as const,
+        name: plugin.name,
+        description: plugin.description,
+        strict: true,
+        parameters: plugin.parameters
+      } as FunctionTool;
+    }
+
+    throw new Error(
+        `No se encontró definición para la tool "${toolName}" (ni built-in ni plugin descubierto).`
+    );
+  });
 }
