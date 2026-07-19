@@ -10,12 +10,14 @@ import {
     summarizeForPrompt
 } from "../agent/taskState";
 import { repositorySourcesFromToolLog, writtenFilesFromToolLog } from "./toolLog";
+import type { Telemetry } from "../observability/telemetry";
 
 export interface ImplementerOptions {
     config: AgentConfig;
     workspace: string;
     supervisionMode?: boolean;
     confirmAction?: (message: string) => Promise<boolean>;
+    telemetry?: Telemetry;
 }
 
 export async function runImplementer(
@@ -39,7 +41,8 @@ ${summarizeForPrompt(taskState)}
             config: options.config,
             supervisionMode: options.supervisionMode ?? false,
             confirmAction: options.confirmAction,
-            taskState
+            taskState,
+            telemetry: options.telemetry
         });
         const sources = repositorySourcesFromToolLog(turnResult.toolCallLog);
         const filesTouched = writtenFilesFromToolLog(turnResult.toolCallLog);

@@ -1,6 +1,7 @@
 import type { ResponseInputItem } from "openai/resources/responses/responses";
 import { llm } from "../llm/client";
 import { AgentConfig } from "../policies/config";
+import { getTelemetry, type Telemetry, type TelemetryUsage } from "../observability/telemetry";
 
 const CONTEXT_SUMMARY_INSTRUCTIONS = `
 Vas a recibir una transcripción de una conversación entre un coding agent y
@@ -26,7 +27,8 @@ Respondé solo con el resumen, sin preámbulo.
  */
 export async function compressConversationIfNeeded(
     conversation: ResponseInputItem[],
-    config: AgentConfig
+    config: AgentConfig,
+    telemetry: Telemetry = getTelemetry(config.langfuse.enabled)
 ): Promise<boolean> {
     const window = config.conversationWindow;
     if (conversation.length <= window) return false;
@@ -36,7 +38,7 @@ export async function compressConversationIfNeeded(
     const toKeep = conversation.slice(-keepRecentCount);
 
     const transcript = stringifyItems(toSummarize);
-    const summaryText = await summarizeTranscript(transcript, config);
+    const summaryText = await summarizeTranscript(transcript, config, telemetry);
 
     conversation.length = 0;
     conversation.push({
@@ -66,13 +68,32 @@ function stringifyItems(items: ResponseInputItem[]): string {
         .join("\n");
 }
 
-async function summarizeTranscript(transcript: string, config: AgentConfig): Promise<string> {
-    const response = await llm.responses.create({
+async function summarizeTranscript(
+    transcript: string,
+    config: AgentConfig,
+    telemetry: Telemetry
+): Promise<string> {
+    return telemetry.observe("llm.context-summary", "generation", {
         model: config.model,
-        instructions: CONTEXT_SUMMARY_INSTRUCTIONS,
-        input: [{ role: "user", content: transcript }],
-        tools: []
+        input: { instructions: CONTEXT_SUMMARY_INSTRUCTIONS, transcript }
+    }, async (observation) => {
+        const response = await llm.responses.create({
+            model: config.model,
+            instructions: CONTEXT_SUMMARY_INSTRUCTIONS,
+            input: [{ role: "user", content: transcript }],
+            tools: []
+        });
+        const usage: TelemetryUsage | undefined = response.usage ? {
+            input: response.usage.input_tokens,
+            output: response.usage.output_tokens,
+            total: response.usage.total_tokens
+        } : undefined;
+        const total = usage ? telemetry.estimateCost(usage, "generation") : undefined;
+        observation.update({
+            output: response.output_text,
+            usageDetails: usage,
+            costDetails: total === undefined ? undefined : { total }
+        });
+        return response.output_text;
     });
-
-    return response.output_text;
 }

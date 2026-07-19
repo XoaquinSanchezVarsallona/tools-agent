@@ -20,6 +20,9 @@
   },
   "homepage": "https://github.com/XoaquinSanchezVarsallona/tools-agent#readme",
   "dependencies": {
+    "@langfuse/otel": "^5.9.1",
+    "@langfuse/tracing": "^5.9.1",
+    "@opentelemetry/sdk-node": "^0.220.0",
     "better-sqlite3": "^12.11.1",
     "cheerio": "^1.2.0",
     "dotenv": "^17.4.2",

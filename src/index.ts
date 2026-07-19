@@ -4,11 +4,13 @@ import { type AgentMode, runAgentTurn } from "./agent/harness";
 import { type OperatingStyle, runOrchestratedTurn } from "./agent/orchestrator";
 import { loadAgentConfig } from "./policies/config";
 import type { ResponseInputItem } from "openai/resources/responses/responses";
+import { getTelemetry } from "./observability/telemetry";
 
 const rl = readline.createInterface({ input, output });
 const normalConversation: ResponseInputItem[] = [];
 const orchestratorConversation: ResponseInputItem[] = [];
 const config = loadAgentConfig(process.env.AGENT_CONFIG_PATH ?? "./agent.config.json");
+const telemetry = getTelemetry(config.langfuse.enabled);
 const WORKSPACE = process.env.AGENT_WORKSPACE ?? "./fixture-user-api";
 
 type CommandResult = "handled" | "exit" | "not-command";
@@ -72,6 +74,7 @@ async function runTurn(userInput: string) {
             workspace: WORKSPACE,
             supervisionMode: state.supervisionMode,
             confirmAction,
+            telemetry,
             onProgress: (stage, message) => console.log(`[${stage}] ${message}`)
         });
     }
@@ -80,28 +83,33 @@ async function runTurn(userInput: string) {
         mode: state.mode,
         config,
         supervisionMode: state.supervisionMode,
-        confirmAction
+        confirmAction,
+        telemetry
     });
 }
 
 async function main() {
-    printHelp();
-    while (true) {
-        const userInput = await rl.question("\nUsuario: ");
-        const commandResult = handleCommand(userInput);
-        if (commandResult === "exit") break;
-        if (commandResult === "handled") continue;
-        const result = await runTurn(userInput);
-        console.log("\nAgente:");
-        console.log(result.finalText);
-        if ("iterations" in result) {
-            console.log(`\nIteraciones del loop interno: ${result.iterations}`);
+    try {
+        printHelp();
+        while (true) {
+            const userInput = await rl.question("\nUsuario: ");
+            const commandResult = handleCommand(userInput);
+            if (commandResult === "exit") break;
+            if (commandResult === "handled") continue;
+            const result = await runTurn(userInput);
+            console.log("\nAgente:");
+            console.log(result.finalText);
+            if ("iterations" in result) {
+                console.log(`\nIteraciones del loop interno: ${result.iterations}`);
+            }
         }
+    } finally {
+        rl.close();
+        await telemetry.flush();
     }
-    rl.close();
 }
 
 main().catch((error) => {
     console.error("Error fatal:", error);
-    process.exit(1);
+    process.exitCode = 1;
 });

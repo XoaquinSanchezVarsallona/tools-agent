@@ -10,10 +10,12 @@ import {
     summarizeForPrompt
 } from "../agent/taskState";
 import { repositorySourcesFromToolLog } from "./toolLog";
+import type { Telemetry } from "../observability/telemetry";
 
 export interface ReviewerOptions {
     config: AgentConfig;
     workspace: string;
+    telemetry?: Telemetry;
 }
 
 export async function runReviewer(
@@ -35,7 +37,9 @@ ${summarizeForPrompt(taskState)}
         const turnResult = await runAgentTurn(prompt, conversation, {
             mode: "reviewer",
             config: options.config,
-            supervisionMode: false
+            supervisionMode: false,
+            taskState,
+            telemetry: options.telemetry
         });
         const sources = repositorySourcesFromToolLog(turnResult.toolCallLog);
         const result: SubagentResult = {

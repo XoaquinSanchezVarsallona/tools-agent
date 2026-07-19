@@ -10,12 +10,14 @@ import {
     summarizeForPrompt
 } from "../agent/taskState";
 import { repositorySourcesFromToolLog } from "./toolLog";
+import type { Telemetry } from "../observability/telemetry";
 
 export interface TesterOptions {
     config: AgentConfig;
     workspace: string;
     supervisionMode?: boolean;
     confirmAction?: (message: string) => Promise<boolean>;
+    telemetry?: Telemetry;
 }
 
 export async function runTester(
@@ -39,7 +41,8 @@ ${summarizeForPrompt(taskState)}
             config: options.config,
             supervisionMode: options.supervisionMode ?? false,
             confirmAction: options.confirmAction,
-            taskState
+            taskState,
+            telemetry: options.telemetry
         });
         const sources = repositorySourcesFromToolLog(turnResult.toolCallLog);
         const failedCommands = commandFailures(turnResult.toolCallLog);

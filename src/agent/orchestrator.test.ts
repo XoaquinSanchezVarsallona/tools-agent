@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ResponseInputItem } from "openai/resources/responses/responses";
+import type { Response, ResponseInputItem } from "openai/resources/responses/responses";
 import {
     runOrchestratedTurn,
     type AssessmentDecision,
@@ -14,6 +14,9 @@ import {
     recordSubagentResult
 } from "./taskState";
 import type { AgentConfig } from "../policies/config";
+import { runAgentTurn } from "./harness";
+import { InMemoryTelemetry, type MemoryObservation } from "../observability/telemetry";
+import type { ToolName } from "../tools";
 
 const config: AgentConfig = {
     model: "test-model",
@@ -118,12 +121,91 @@ test("persistent findings fail after one repair without a second retry", async (
         ],
         calls
     });
-    console.log("Calls made:", calls);
-    console.log("Final result:", result);
     assert.equal(calls.filter((call) => call === "implementer").length, 2);
     assert.equal(result.repairAttempted, true);
     assert.equal(result.taskState.status, "failed");
     assert.match(result.taskState.observations.at(-1)?.message ?? "", /persiste/i);
+});
+
+test("agent flow creates a complete Langfuse-compatible telemetry trace", async () => {
+    const telemetry = new InMemoryTelemetry({ inputPerMillion: 2, outputPerMillion: 8 });
+    const responses = [
+        responseWithRepositoryTools(),
+        finalResponse("Repository inspection complete"),
+        responseWithWebSearch(),
+        finalResponse("Telemetry complete")
+    ];
+
+    const runtime = {
+        createResponse: async () => responses.shift() ?? finalResponse("Unexpected call"),
+        executeTool: async (tool: ToolName, args: unknown) => {
+            if (tool === "read_file") {
+                return { path: (args as { path: string }).path, content: "Retrieved document body" };
+            }
+            if (tool === "web_search") {
+                return {
+                    query: "Langfuse TypeScript",
+                    results: [{
+                        title: "Langfuse docs",
+                        url: "https://langfuse.com/docs",
+                        snippet: "Official observability documentation"
+                    }]
+                };
+            }
+            return { error: "Simulated command failure" };
+        }
+    };
+    const agentOptions = {
+        config: { ...config, model: "gpt-test", langfuse: { enabled: true } },
+        supervisionMode: false,
+        telemetry,
+        runtime
+    };
+
+    const result = await telemetry.observe("test.agent-flow", "agent", {
+        input: "Inspect docs, search the web, and report."
+    }, async (trace) => {
+        await runAgentTurn("Inspect repository docs.", [], { ...agentOptions, mode: "normal" });
+        const webResult = await runAgentTurn("Search official docs.", [], {
+            ...agentOptions,
+            mode: "researcher_web"
+        });
+        trace.update({ output: webResult.finalText });
+        return webResult;
+    });
+
+    assert.equal(result.finalText, "Telemetry complete");
+    assert.equal(telemetry.traces.length, 1);
+    const trace = telemetry.traces[0];
+    const observations = flatten(trace);
+
+    assert.equal(trace.type, "agent");
+    assert.match(JSON.stringify(trace.input), /Inspect docs/);
+    assert.match(JSON.stringify(trace.output), /Telemetry complete/);
+    assert.equal(observations.filter((item) => item.name.startsWith("iteration.")).length, 4);
+    assert.ok(observations.some((item) => item.name === "prompt.construction"));
+
+    const generations = observations.filter((item) => item.type === "generation");
+    assert.equal(generations.length, 4);
+    assert.ok(generations.every((item) => item.model === "gpt-test"));
+    assert.match(JSON.stringify(generations[0]?.input), /Inspect repository docs/);
+    assert.match(JSON.stringify(generations[0]?.input), /Sos un coding agent/);
+    assert.ok(generations.every((item) => (item.usageDetails?.total ?? 0) > 0));
+    assert.ok(generations.every((item) => (item.costDetails?.total ?? 0) > 0));
+
+    const document = observations.find((item) => item.name === "tool.read_file");
+    assert.equal(document?.type, "retriever");
+    assert.match(JSON.stringify(document?.output), /Retrieved document body/);
+
+    const webSearch = observations.find((item) => item.name === "tool.web_search");
+    assert.equal(webSearch?.type, "tool");
+    assert.match(JSON.stringify(webSearch?.output), /https:\/\/langfuse.com\/docs/);
+    assert.equal(webSearch?.metadata?.category, "web_search");
+
+    const error = observations.find((item) => item.name === "tool.run_command");
+    assert.equal(error?.level, "ERROR");
+    assert.match(error?.statusMessage ?? "", /Simulated command failure/);
+    assert.ok(observations.every((item) => typeof item.latencyMs === "number"));
 });
 
 async function runWith(input: {
@@ -206,4 +288,56 @@ function decision(overrides: Partial<RoutingDecision>): RoutingDecision {
         rationale: "Test route",
         ...overrides
     };
+}
+
+function responseWithRepositoryTools(): Response {
+    return {
+        output_text: "",
+        output: [
+            toolCall("call-read", "read_file", { path: "docs/guide.md" }),
+            toolCall("call-command", "run_command", { command: "npm test" })
+        ],
+        usage: usage(100, 20)
+    } as unknown as Response;
+}
+
+function responseWithWebSearch(): Response {
+    return {
+        output_text: "",
+        output: [
+            toolCall("call-web", "web_search", { query: "Langfuse TypeScript", maxResults: 1 })
+        ],
+        usage: usage(80, 15)
+    } as unknown as Response;
+}
+
+function finalResponse(text: string): Response {
+    return {
+        output_text: text,
+        output: [{ type: "message", role: "assistant", content: [] }],
+        usage: usage(50, 10)
+    } as unknown as Response;
+}
+
+function toolCall(callId: string, name: string, args: unknown) {
+    return {
+        type: "function_call",
+        call_id: callId,
+        name,
+        arguments: JSON.stringify(args)
+    };
+}
+
+function usage(input: number, output: number) {
+    return {
+        input_tokens: input,
+        input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+        output_tokens: output,
+        output_tokens_details: { reasoning_tokens: 0 },
+        total_tokens: input + output
+    };
+}
+
+function flatten(root: MemoryObservation): MemoryObservation[] {
+    return [root, ...root.children.flatMap(flatten)];
 }

@@ -11,9 +11,11 @@ import {
 } from "../agent/taskState";
 import { DEFAULT_MIN_SCORE, retrieveFromRag } from "../rag/retrieve";
 import { WebSearchOutput } from "../tools/webSearch";
+import { getTelemetry, type Telemetry } from "../observability/telemetry";
 
 export interface ResearcherOptions {
     config: AgentConfig;
+    telemetry?: Telemetry;
 }
 
 export async function runResearcher(
@@ -21,10 +23,29 @@ export async function runResearcher(
     query: string,
     options: ResearcherOptions
 ): Promise<SubagentResult> {
+    const telemetry = options.telemetry ?? getTelemetry(options.config.langfuse.enabled);
+    return telemetry.observe("subagent.researcher", "agent", {
+        input: { query, request: taskState.originalRequest }
+    }, async (observation) => {
+        const result = await runResearcherInternal(taskState, query, { ...options, telemetry });
+        observation.update({
+            output: result,
+            level: result.success ? "DEFAULT" : "ERROR",
+            statusMessage: result.success ? undefined : result.summary
+        });
+        return result;
+    });
+}
+
+async function runResearcherInternal(
+    taskState: TaskState,
+    query: string,
+    options: ResearcherOptions & { telemetry: Telemetry }
+): Promise<SubagentResult> {
     const startedAt = new Date().toISOString();
     logProgress(taskState, `Researcher: consultando RAG para: "${query}"`);
 
-    const ragResult = await retrieveFromRag(query, options.config);
+    const ragResult = await retrieveFromRag(query, options.config, undefined, undefined, options.telemetry);
 
     if (ragResult.hasEnoughEvidence) {
         return synthesizeFromRag(taskState, query, ragResult, startedAt, options);
@@ -68,7 +89,9 @@ ${contextText}
         turnResult = await runAgentTurn(prompt, conversation, {
             mode: "researcher_synthesis",
             config: options.config,
-            supervisionMode: false
+            supervisionMode: false,
+            taskState,
+            telemetry: options.telemetry
         });
     } catch (error: unknown) {
         return failResult(taskState, startedAt, error);
@@ -108,7 +131,8 @@ async function researchFromWeb(
             mode: "researcher_web",
             config: options.config,
             supervisionMode: false,
-            taskState
+            taskState,
+            telemetry: options.telemetry
         });
     } catch (error: unknown) {
         return failResult(taskState, startedAt, error);

@@ -11,10 +11,12 @@ import {
 } from "../agent/taskState";
 import { hasSufficientMemory, loadProjectMemory, summarizeMemoryForPrompt } from "../memory/projectMemory";
 import { updateProjectMemory } from "../memory/memoryWriter";
+import type { Telemetry } from "../observability/telemetry";
 
 export interface ExplorerOptions {
     config: AgentConfig;
     workspace: string;
+    telemetry?: Telemetry;
 }
 
 export async function runExplorer(
@@ -36,7 +38,8 @@ Pedido original del usuario (para darte contexto de qué buscar): "${taskState.o
             mode: "explorer",
             config: options.config,
             supervisionMode: false,
-            taskState
+            taskState,
+            telemetry: options.telemetry
         });
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
@@ -138,7 +141,7 @@ export async function runExplorerWithMemory(
     const result = await runExplorer(taskState, options);
 
     if (result.success) {
-        await updateProjectMemory(taskState, result.summary, options.config);
+        await updateProjectMemory(taskState, result.summary, options.config, options.telemetry);
     }
 
     return result;

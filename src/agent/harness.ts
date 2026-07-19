@@ -1,7 +1,10 @@
 import type {
+    FunctionTool,
+    Response,
     ResponseFormatTextConfig,
     ResponseFunctionToolCall,
-    ResponseInputItem
+    ResponseInputItem,
+    ResponseTextConfig
 } from "openai/resources/responses/responses";
 import { llm } from "../llm/client";
 import type { AgentConfig } from "../policies/config";
@@ -11,6 +14,12 @@ import { getToolDefinitions } from "../toolsDefinition";
 import { checkForLoop, fingerprintArgs, handleLoopDetected } from "./loopDetector";
 import { recordAction, type TaskState } from "./taskState";
 import { compressConversationIfNeeded } from "./contextManager";
+import {
+    getTelemetry,
+    type Telemetry,
+    type TelemetryObservation,
+    type TelemetryUsage
+} from "../observability/telemetry";
 
 const AGENT_INSTRUCTIONS = `
 Sos un coding agent.
@@ -215,6 +224,21 @@ export interface AgentOptions {
     confirmAction?: (message: string) => Promise<boolean>;
     responseFormat?: ResponseFormatTextConfig;
     taskState?: TaskState;
+    telemetry?: Telemetry;
+    runtime?: AgentRuntime;
+}
+
+export interface AgentRuntime {
+    createResponse?: (request: AgentResponseRequest) => Promise<Response>;
+    executeTool?: (toolName: ToolName, args: unknown) => Promise<unknown>;
+}
+
+export interface AgentResponseRequest {
+    model: string;
+    instructions: string;
+    input: ResponseInputItem[];
+    tools: FunctionTool[];
+    text?: ResponseTextConfig;
 }
 
 export interface AgentTurnResult {
@@ -235,75 +259,130 @@ export async function runAgentTurn(
     options: AgentOptions
 ): Promise<AgentTurnResult> {
     const modeConfig = getModeConfig(options.mode);
+    const telemetry = options.telemetry ?? getTelemetry(options.config?.langfuse.enabled ?? false);
     const toolCallLog: ToolCallLogEntry[] = [];
     const maxIterations = options.config?.maxIterations ?? DEFAULT_MAX_ITERATIONS;
-    addUserMessage(conversation, userMessage);
-    let iterations = 0;
+    return telemetry.observe(`agent.${options.mode}`, "agent", {
+        input: { userMessage, mode: options.mode }
+    }, async (agentObservation) => {
+        await telemetry.observe("prompt.construction", "span", { input: userMessage }, async (prompt) => {
+            addUserMessage(conversation, userMessage);
+            prompt.update({
+                output: {
+                    instructions: modeConfig.instructions,
+                    allowedTools: modeConfig.toolNames,
+                    conversationItems: conversation.length
+                }
+            });
+        });
 
-    while (true) {
-        iterations++;
+        let iterations = 0;
+        while (true) {
+            iterations++;
 
-        if (iterations > maxIterations) {
-            return {
-                finalText:
-                    `No puedo continuar: se alcanzó el máximo de ${maxIterations} iteraciones ` +
-                    `sin llegar a una respuesta final. Esto puede indicar que la tarea es demasiado ` +
-                    `compleja para resolver en un solo turno, o que hace falta más contexto.`,
-                iterations,
-                toolCallLog,
-                stoppedDueToMaxIterations: true
-            };
-        }
+            if (iterations > maxIterations) {
+                const result: AgentTurnResult = {
+                    finalText:
+                        `No puedo continuar: se alcanzó el máximo de ${maxIterations} iteraciones ` +
+                        `sin llegar a una respuesta final. Esto puede indicar que la tarea es demasiado ` +
+                        `compleja para resolver en un solo turno, o que hace falta más contexto.`,
+                    iterations,
+                    toolCallLog,
+                    stoppedDueToMaxIterations: true
+                };
+                agentObservation.update({ level: "ERROR", statusMessage: "Máximo de iteraciones alcanzado.", output: result });
+                return result;
+            }
 
-        if (options.config) {
-            await compressConversationIfNeeded(conversation, options.config);
-        }
+            const iteration = iterations;
+            const turn = await telemetry.observe(`iteration.${iteration}`, "chain", {
+                input: { iteration }
+            }, async (iterationObservation) => {
+                if (options.config) {
+                    await compressConversationIfNeeded(conversation, options.config, telemetry);
+                }
 
-        const response = await createAgentResponse(conversation, modeConfig, options);
-        appendResponseOutput(conversation, response.output);
-        const toolCalls = findToolCalls(response.output);
+                const response = await createAgentResponse(conversation, modeConfig, options, telemetry);
+                appendResponseOutput(conversation, response.output);
+                const toolCalls = findToolCalls(response.output);
 
-        if (toolCalls.length === 0) {
-            return { finalText: response.output_text, iterations, toolCallLog };
-        }
-
-        for (const toolCall of toolCalls) {
-            await handleToolCall(toolCall, conversation, options, modeConfig, toolCallLog);
-        }
-
-        if (options.taskState && options.config) {
-            const loopCheck = checkForLoop(options.taskState, options.config);
-            if (loopCheck.looping) {
-                const handled = handleLoopDetected(
-                    options.taskState,
-                    options.config,
-                    conversation,
-                    loopCheck.reason ?? "Se detectó una acción repetida sin avance."
-                );
-                if (handled.shouldStop) {
-                    return {
-                        finalText: handled.stopMessage,
-                        iterations,
+                for (const toolCall of toolCalls) {
+                    await handleToolCall(
+                        toolCall,
+                        conversation,
+                        options,
+                        modeConfig,
                         toolCallLog,
-                        stoppedDueToLoop: true
-                    };
+                        telemetry
+                    );
+                }
+
+                iterationObservation.update({
+                    output: { toolCalls: toolCalls.length, hasFinalOutput: toolCalls.length === 0 }
+                });
+                return { response, toolCalls };
+            });
+
+            if (turn.toolCalls.length === 0) {
+                const result = { finalText: turn.response.output_text, iterations, toolCallLog };
+                agentObservation.update({ output: result });
+                return result;
+            }
+
+            if (options.taskState && options.config) {
+                const loopCheck = checkForLoop(options.taskState, options.config);
+                if (loopCheck.looping) {
+                    const handled = handleLoopDetected(
+                        options.taskState,
+                        options.config,
+                        conversation,
+                        loopCheck.reason ?? "Se detectó una acción repetida sin avance."
+                    );
+                    if (handled.shouldStop) {
+                        const result: AgentTurnResult = {
+                            finalText: handled.stopMessage,
+                            iterations,
+                            toolCallLog,
+                            stoppedDueToLoop: true
+                        };
+                        agentObservation.update({ level: "ERROR", statusMessage: "Loop detectado.", output: result });
+                        return result;
+                    }
                 }
             }
         }
-    }
+    });
 }
 
 async function createAgentResponse(
     conversation: ResponseInputItem[],
     modeConfig: ModeConfig,
-    options: AgentOptions
+    options: AgentOptions,
+    telemetry: Telemetry
 ) {
-    return llm.responses.create({
+    const request: AgentResponseRequest = {
         model: options.config?.model ?? "gpt-5.2",
         instructions: modeConfig.instructions,
         input: conversation,
         tools: getToolDefinitions(modeConfig.toolNames),
         text: options.responseFormat ? { format: options.responseFormat } : undefined
+    };
+
+    return telemetry.observe("llm.response", "generation", {
+        input: request,
+        model: request.model,
+        metadata: { mode: options.mode }
+    }, async (generation) => {
+        const response = options.runtime?.createResponse
+            ? await options.runtime.createResponse(request)
+            : await llm.responses.create(request);
+        const usage = response.usage ? responseUsage(response.usage) : undefined;
+        generation.update({
+            output: { outputText: response.output_text, output: response.output },
+            usageDetails: usage,
+            costDetails: costDetails(telemetry, usage, "generation")
+        });
+        return response;
     });
 }
 
@@ -312,42 +391,61 @@ async function handleToolCall(
     conversation: ResponseInputItem[],
     options: AgentOptions,
     modeConfig: ModeConfig,
-    toolCallLog: ToolCallLogEntry[]
+    toolCallLog: ToolCallLogEntry[],
+    telemetry: Telemetry
 ) {
-    const parsedCall = parseToolCall(toolCall, modeConfig.toolNames);
-    if (!parsedCall.ok) {
-        appendToolOutput(conversation, toolCall.call_id, parsedCall.output);
-        return;
-    }
+    return telemetry.observe(`tool.${toolCall.name}`, toolObservationType(toolCall.name), {
+        input: { arguments: toolCall.arguments }
+    }, async (toolObservation) => {
+        const parsedCall = parseToolCall(toolCall, modeConfig.toolNames);
+        if (!parsedCall.ok) {
+            appendToolOutput(conversation, toolCall.call_id, parsedCall.output);
+            recordObservationError(toolObservation, parsedCall.output.error);
+            return;
+        }
 
-    const decision = options.config
-        ? validateToolCall(options.config, parsedCall.name, asToolArgs(parsedCall.args))
-        : defaultPolicyDecision(parsedCall.name, options);
+        const decision = options.config
+            ? validateToolCall(options.config, parsedCall.name, asToolArgs(parsedCall.args))
+            : defaultPolicyDecision(parsedCall.name, options);
 
-    if (!decision.allowed) {
-        appendToolOutput(conversation, toolCall.call_id, deniedToolOutput(decision.reason));
-        const summary = `denegado: ${decision.reason}`;
-        toolCallLog.push(
-            logEntry(parsedCall.name, parsedCall.args, summary, { denied: true, reason: decision.reason }, true)
-        );
+        if (!decision.allowed) {
+            const output = deniedToolOutput(decision.reason);
+            appendToolOutput(conversation, toolCall.call_id, output);
+            const summary = `denegado: ${decision.reason}`;
+            toolCallLog.push(
+                logEntry(parsedCall.name, parsedCall.args, summary, { denied: true, reason: decision.reason }, true)
+            );
+            recordActionIfTracking(options, parsedCall.name, parsedCall.args, summary);
+            recordObservationError(toolObservation, decision.reason, output);
+            return;
+        }
+
+        const approved = await requestApproval(parsedCall.name, parsedCall.args, decision, options);
+        if (!approved) {
+            const output = rejectedToolOutput();
+            appendToolOutput(conversation, toolCall.call_id, output);
+            const summary = "rechazado por el usuario";
+            toolCallLog.push(logEntry(parsedCall.name, parsedCall.args, summary, { rejected: true }, true));
+            recordActionIfTracking(options, parsedCall.name, parsedCall.args, summary);
+            recordObservationError(toolObservation, "Acción rechazada por el usuario.", output);
+            return;
+        }
+
+        const output = await executeTool(parsedCall.name, parsedCall.args, options);
+        appendToolOutput(conversation, toolCall.call_id, output);
+        const summary = summarizeOutput(output);
+        toolCallLog.push(logEntry(parsedCall.name, parsedCall.args, summary, output, false));
         recordActionIfTracking(options, parsedCall.name, parsedCall.args, summary);
-        return;
-    }
-
-    const approved = await requestApproval(parsedCall.name, parsedCall.args, decision, options);
-    if (!approved) {
-        appendToolOutput(conversation, toolCall.call_id, rejectedToolOutput());
-        const summary = "rechazado por el usuario";
-        toolCallLog.push(logEntry(parsedCall.name, parsedCall.args, summary, { rejected: true }, true));
-        recordActionIfTracking(options, parsedCall.name, parsedCall.args, summary);
-        return;
-    }
-
-    const output = await executeTool(parsedCall.name, parsedCall.args);
-    appendToolOutput(conversation, toolCall.call_id, output);
-    const summary = summarizeOutput(output);
-    toolCallLog.push(logEntry(parsedCall.name, parsedCall.args, summary, output, false));
-    recordActionIfTracking(options, parsedCall.name, parsedCall.args, summary);
+        if (isErrorOutput(output)) {
+            recordObservationError(toolObservation, String(output.error), output);
+        } else {
+            toolObservation.update({
+                input: parsedCall.args,
+                output,
+                metadata: toolMetadata(parsedCall.name, output)
+            });
+        }
+    });
 }
 
 function recordActionIfTracking(
@@ -384,9 +482,11 @@ function parseToolCall(toolCall: ResponseFunctionToolCall, allowed: readonly Too
     }
 }
 
-async function executeTool(toolName: ToolName, args: unknown) {
+async function executeTool(toolName: ToolName, args: unknown, options: AgentOptions) {
     try {
-        return await toolRegistry[toolName](args as never);
+        return options.runtime?.executeTool
+            ? await options.runtime.executeTool(toolName, args)
+            : await toolRegistry[toolName](args as never);
     } catch (error: unknown) {
         return { error: formatError(error) };
     }
@@ -470,4 +570,52 @@ function formatError(error: unknown) {
 
 function isResponseItem(item: unknown): item is { type: string } {
     return typeof item === "object" && item !== null && "type" in item;
+}
+
+function responseUsage(usage: NonNullable<Response["usage"]>): TelemetryUsage {
+    return {
+        input: usage.input_tokens,
+        output: usage.output_tokens,
+        total: usage.total_tokens
+    };
+}
+
+function costDetails(
+    telemetry: Telemetry,
+    usage: TelemetryUsage | undefined,
+    type: "generation" | "embedding"
+) {
+    if (!usage) return undefined;
+    const total = telemetry.estimateCost(usage, type);
+    return total === undefined ? undefined : { total };
+}
+
+function toolObservationType(name: string): "tool" | "retriever" {
+    return name === "read_file" || name === "list_files" ? "retriever" : "tool";
+}
+
+function toolMetadata(tool: ToolName, output: unknown): Record<string, unknown> {
+    if (tool === "web_search") {
+        const webOutput = output as { query?: string; results?: unknown[] };
+        return {
+            category: "web_search",
+            query: webOutput.query,
+            resultCount: webOutput.results?.length ?? 0
+        };
+    }
+    return {
+        category: tool === "read_file" || tool === "list_files" ? "document_loading" : "tool"
+    };
+}
+
+function recordObservationError(
+    observation: TelemetryObservation,
+    message: string,
+    output?: unknown
+): void {
+    observation.update({ level: "ERROR", statusMessage: message, output });
+}
+
+function isErrorOutput(output: unknown): output is { error: unknown } {
+    return typeof output === "object" && output !== null && "error" in output;
 }

@@ -126,6 +126,22 @@ El harness del agente está en `src/agent/harness.ts`.
 
 Las tools se definen en `src/toolsDefinition.ts` y se registran en `src/tools/index.ts`.
 
+## Observabilidad con Langfuse
+
+Cuando `langfuse.enabled` está activo en `agent.config.json` y existen
+`LANGFUSE_PUBLIC_KEY` y `LANGFUSE_SECRET_KEY`, cada turno genera un trace con prompts,
+llamadas al modelo, tokens, costos, iteraciones, tools, documentos recuperados,
+búsquedas web, errores y resultado final. El modo Orchestrator agrupa todos sus
+subagentes y ciclos de reparación dentro del mismo trace.
+
+La URL se configura con `LANGFUSE_BASE_URL`. Langfuse puede inferir costos a partir
+del modelo y los tokens; para registrar una estimación explícita se pueden definir
+`LANGFUSE_INPUT_COST_PER_MILLION_USD`, `LANGFUSE_OUTPUT_COST_PER_MILLION_USD` y
+`LANGFUSE_EMBEDDING_COST_PER_MILLION_USD`.
+
+Sin credenciales se usa un adapter no-op que no bloquea al agente. Los tests usan
+un adapter en memoria con la misma estructura y nunca envían datos externos.
+
 Para validar tipos:
 
 ```bash

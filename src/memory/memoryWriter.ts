@@ -3,6 +3,7 @@ import { runAgentTurn } from "../agent/harness";
 import { AgentConfig } from "../policies/config";
 import { TaskState, addObservation, logProgress } from "../agent/taskState";
 import { ProjectMemory, loadProjectMemory, saveProjectMemory } from "./projectMemory";
+import type { Telemetry } from "../observability/telemetry";
 
 interface MemorySynthesisOutput {
     architecture: string;
@@ -15,7 +16,8 @@ interface MemorySynthesisOutput {
 export async function updateProjectMemory(
     taskState: TaskState,
     explorerSummary: string,
-    config: AgentConfig
+    config: AgentConfig,
+    telemetry?: Telemetry
 ): Promise<ProjectMemory> {
     const previousMemory = loadProjectMemory(config);
 
@@ -33,7 +35,9 @@ ${explorerSummary}
         const turnResult = await runAgentTurn(prompt, conversation, {
             mode: "memory_synthesis",
             config,
-            supervisionMode: false
+            supervisionMode: false,
+            taskState,
+            telemetry
         });
 
         const parsed = parseMemorySynthesis(turnResult.finalText);
