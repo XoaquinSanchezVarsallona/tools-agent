@@ -10,6 +10,7 @@ import { toolRegistry, type ToolName } from "../tools/index";
 import { getToolDefinitions } from "../toolsDefinition";
 import { checkForLoop, fingerprintArgs, handleLoopDetected } from "./loopDetector";
 import { recordAction, type TaskState } from "./taskState";
+import { compressConversationIfNeeded } from "./contextManager";
 
 const AGENT_INSTRUCTIONS = `
 Sos un coding agent.
@@ -252,6 +253,10 @@ export async function runAgentTurn(
                 toolCallLog,
                 stoppedDueToMaxIterations: true
             };
+        }
+
+        if (options.config) {
+            await compressConversationIfNeeded(conversation, options.config);
         }
 
         const response = await createAgentResponse(conversation, modeConfig, options);
