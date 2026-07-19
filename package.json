@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "test": "npm run build",
+    "test": "npm run build && node --import tsx --test src/agent/orchestrator.test.ts",
     "start": "tsx src/index.ts"
   },
   "repository": {

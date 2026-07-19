@@ -20,7 +20,11 @@ export function repositorySourcesFromToolLog(log: ToolCallLogEntry[]): Source[] 
 export function writtenFilesFromToolLog(log: ToolCallLogEntry[]): string[] {
     return [...new Set(
         log
-            .filter((entry) => entry.tool === "write_file" && !entry.denied)
+            .filter((entry) =>
+                entry.tool === "write_file"
+                && !entry.denied
+                && (entry.rawOutput as { success?: boolean }).success === true
+            )
             .map((entry) => (entry.args as { path?: string }).path)
             .filter((path): path is string => Boolean(path))
     )];
