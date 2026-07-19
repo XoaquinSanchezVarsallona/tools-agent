@@ -1,4 +1,5 @@
 import type {
+    ResponseFormatTextConfig,
     ResponseFunctionToolCall,
     ResponseInputItem
 } from "openai/resources/responses/responses";
@@ -56,6 +57,26 @@ Priorizá los hallazgos por severidad y citá archivo y ubicación cuando exista
 Si no encontrás problemas, decilo y mencioná cualquier riesgo residual.
 `.trim();
 
+const ORCHESTRATOR_ROUTING_INSTRUCTIONS = `
+Sos el agente principal en modo Orchestrator.
+Convertí el pedido actual, incluyendo cualquier contexto conversacional, en una tarea autocontenida.
+Elegí solo los subagentes necesarios. Usá Researcher únicamente si hace falta evidencia externa.
+Si elegís Implementer, Tester y Reviewer son obligatorios. No inventes contexto faltante.
+Respondé únicamente con el objeto estructurado solicitado.
+`.trim();
+
+const ORCHESTRATOR_ASSESSMENT_INSTRUCTIONS = `
+Sos el agente principal en modo Orchestrator evaluando resultados de implementación.
+Determiná si los resultados de Tester o Reviewer requieren una corrección concreta.
+No pidas reparación por riesgos hipotéticos sin evidencia. Respondé únicamente con el objeto solicitado.
+`.trim();
+
+const ORCHESTRATOR_SYNTHESIS_INSTRUCTIONS = `
+Sos el agente principal en modo Orchestrator.
+Sintetizá el resultado real de los subagentes para el usuario: cambios, validación, hallazgos y bloqueos.
+No afirmes éxito si el estado o la evidencia indican lo contrario. Sé breve y accionable.
+`.trim();
+
 const RESEARCHER_SYNTHESIS_INSTRUCTIONS = `
 Sos el subagente Researcher dentro de un sistema multi-agente de coding.
 Se te va a dar contexto recuperado de una base de documentación (RAG) sobre el
@@ -86,6 +107,9 @@ export type AgentMode =
     | "implementer"
     | "tester"
     | "reviewer"
+    | "orchestrator_routing"
+    | "orchestrator_assessment"
+    | "orchestrator_synthesis"
     | "researcher_synthesis"
     | "researcher_web";
 
@@ -119,6 +143,18 @@ const MODE_CONFIG: Record<AgentMode, ModeConfig> = {
         instructions: REVIEWER_INSTRUCTIONS,
         toolNames: ["read_file", "list_files"]
     },
+    orchestrator_routing: {
+        instructions: ORCHESTRATOR_ROUTING_INSTRUCTIONS,
+        toolNames: []
+    },
+    orchestrator_assessment: {
+        instructions: ORCHESTRATOR_ASSESSMENT_INSTRUCTIONS,
+        toolNames: []
+    },
+    orchestrator_synthesis: {
+        instructions: ORCHESTRATOR_SYNTHESIS_INSTRUCTIONS,
+        toolNames: []
+    },
     researcher_synthesis: {
         instructions: RESEARCHER_SYNTHESIS_INSTRUCTIONS,
         toolNames: []
@@ -144,6 +180,7 @@ export interface AgentOptions {
     config?: AgentConfig;
     supervisionMode: boolean;
     confirmAction?: (message: string) => Promise<boolean>;
+    responseFormat?: ResponseFormatTextConfig;
 }
 
 export interface AgentTurnResult {
@@ -190,7 +227,8 @@ async function createAgentResponse(
         model: options.config?.model ?? "gpt-5.2",
         instructions: modeConfig.instructions,
         input: conversation,
-        tools: getToolDefinitions(modeConfig.toolNames)
+        tools: getToolDefinitions(modeConfig.toolNames),
+        text: options.responseFormat ? { format: options.responseFormat } : undefined
     });
 }
 

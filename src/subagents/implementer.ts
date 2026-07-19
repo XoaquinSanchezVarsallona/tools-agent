@@ -42,13 +42,34 @@ ${summarizeForPrompt(taskState)}
         });
         const sources = repositorySourcesFromToolLog(turnResult.toolCallLog);
         const filesTouched = writtenFilesFromToolLog(turnResult.toolCallLog);
+        const blockedActions = turnResult.toolCallLog.filter((entry) => {
+            if (entry.tool !== "write_file" && entry.tool !== "run_command") return false;
+            if (entry.denied) return true;
+            return entry.tool === "write_file" && "error" in (entry.rawOutput as object);
+        });
+        const blockedByApproval = blockedActions.some((entry) =>
+            Boolean((entry.rawOutput as { rejected?: boolean }).rejected)
+        );
+        const success = blockedActions.length === 0;
+
+        if (!success) {
+            addObservation(
+                taskState,
+                `Implementer: ${blockedActions.length} acción(es) modificadora(s) fueron rechazadas o denegadas.`,
+                blockedByApproval ? "warning" : "blocker"
+            );
+        }
         const result: SubagentResult = {
             subagent: "implementer",
             summary: turnResult.finalText,
             sources,
             filesTouched,
-            success: true,
-            raw: { iterations: turnResult.iterations },
+            success,
+            raw: {
+                iterations: turnResult.iterations,
+                blockedActions: blockedActions.map((entry) => entry.outputSummary),
+                blockedByApproval
+            },
             startedAt,
             finishedAt: new Date().toISOString()
         };
@@ -56,7 +77,9 @@ ${summarizeForPrompt(taskState)}
         recordSubagentResult(taskState, result);
         logProgress(
             taskState,
-            `Implementer: implementación completa. ${filesTouched.length} archivo(s) modificado(s).`
+            success
+                ? `Implementer: implementación completa. ${filesTouched.length} archivo(s) modificado(s).`
+                : "Implementer: implementación finalizada con acciones bloqueadas."
         );
         return result;
     } catch (error: unknown) {

@@ -42,6 +42,8 @@ Ahí podés pedirle tareas al agente en lenguaje natural.
 
 | Comando | Descripción |
 | --- | --- |
+| `/orchestrator on` | Activa delegación adaptativa a subagentes para los próximos pedidos. |
+| `/orchestrator off` | Vuelve al comportamiento normal del agente principal. |
 | `/plan on` | Activa el modo planificación. El agente puede inspeccionar archivos y propone un plan sin ejecutar cambios. |
 | `/plan off` | Vuelve al modo normal. |
 | `/supervision on` | Activa confirmación manual antes de ejecutar herramientas que modifican el sistema. Es el modo inicial. |
@@ -89,6 +91,17 @@ Usuario: implementá el plan
 ```
 
 El historial se conserva al cambiar de modo, por lo que el agente puede usar el plan anterior como contexto. `/plan off` es el paso explícito para volver a habilitar las tools de escritura y ejecución de comandos.
+
+## Modo Orchestrator
+
+El modo Orchestrator mantiene un historial separado y selecciona los subagentes necesarios
+para cada pedido. Las tareas de implementación siempre pasan por Tester y Reviewer. Si
+encuentran un problema concreto, el Orchestrator permite un único ciclo de reparación y
+repite la verificación antes de sintetizar la respuesta final.
+
+Durante el trabajo, el CLI muestra actualizaciones breves por etapa. Las políticas,
+aprobaciones y el modo de supervisión siguen aplicándose a los subagentes que pueden
+escribir archivos o ejecutar comandos. Plan mode continúa siendo exclusivo del modo normal.
 
 ## Herramientas disponibles
 

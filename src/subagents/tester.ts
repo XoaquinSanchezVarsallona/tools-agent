@@ -97,7 +97,7 @@ function commandFailures(log: ToolCallLogEntry[]): Array<{ command: string; reas
         if (entry.denied) return [{ command, reason: entry.outputSummary }];
 
         const output = entry.rawOutput as { exitCode?: number };
-        return output.exitCode && output.exitCode !== 0
+        return typeof output.exitCode === "number" && output.exitCode !== 0
             ? [{ command, reason: entry.outputSummary }]
             : [];
     });
