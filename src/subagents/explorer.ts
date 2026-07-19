@@ -9,6 +9,8 @@ import {
     logProgress,
     recordSubagentResult
 } from "../agent/taskState";
+import { hasSufficientMemory, loadProjectMemory, summarizeMemoryForPrompt } from "../memory/projectMemory";
+import { updateProjectMemory } from "../memory/memoryWriter";
 
 export interface ExplorerOptions {
     config: AgentConfig;
@@ -85,4 +87,58 @@ function buildSourcesFromToolCalls(log: ToolCallLogEntry[]): Source[] {
                 retrievedAt: new Date().toISOString()
             };
         });
+}
+
+/**
+ * Variante del Explorer que primero chequea la memoria persistente del
+ * proyecto. Si ya hay evidencia suficiente guardada de sesiones anteriores,
+ * la reutiliza sin volver a explorar el repositorio desde cero (Tarea 2 de
+ * la consigna). Si no hay memoria suficiente, explora normalmente y al
+ * terminar actualiza la memoria para la próxima sesión.
+ */
+export async function runExplorerWithMemory(
+    taskState: TaskState,
+    options: ExplorerOptions,
+    forceReExplore: boolean = false
+): Promise<SubagentResult> {
+    const memory = loadProjectMemory(options.config);
+
+    if (hasSufficientMemory(memory) && !forceReExplore) {
+        const startedAt = new Date().toISOString();
+        const summary = summarizeMemoryForPrompt(memory);
+
+        logProgress(
+            taskState,
+            "Explorer: se encontró memoria persistente suficiente del proyecto. Se reutiliza en vez de re-explorar."
+        );
+
+        const result: SubagentResult = {
+            subagent: "explorer",
+            summary: `(Recuperado de memoria persistente, sin re-explorar el repositorio)\n\n${summary}`,
+            sources: [
+                {
+                    type: "memory",
+                    ref: options.config.paths.memory,
+                    snippet: summary.slice(0, 300),
+                    retrievedAt: new Date().toISOString()
+                }
+            ],
+            filesTouched: [],
+            success: true,
+            raw: { origin: "memory" },
+            startedAt,
+            finishedAt: new Date().toISOString()
+        };
+
+        recordSubagentResult(taskState, result);
+        return result;
+    }
+
+    const result = await runExplorer(taskState, options);
+
+    if (result.success) {
+        await updateProjectMemory(taskState, result.summary, options.config);
+    }
+
+    return result;
 }

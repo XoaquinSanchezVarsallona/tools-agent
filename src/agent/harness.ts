@@ -79,6 +79,30 @@ Reglas:
   cada afirmación relevante.
 `.trim();
 
+const MEMORY_SYNTHESIS_INSTRUCTIONS = `
+Sos el subagente encargado de mantener la memoria persistente del proyecto.
+Se te va a dar la memoria actual (en JSON) y los hallazgos nuevos de una
+exploración del repositorio (texto libre).
+
+Tu trabajo es devolver ÚNICAMENTE un JSON válido (sin texto adicional, sin
+markdown, sin backticks) con esta forma exacta:
+
+{
+  "architecture": "string describiendo la arquitectura general",
+  "conventions": ["convención 1", "convención 2"],
+  "dependencies": ["dependencia 1", "dependencia 2"],
+  "usefulCommands": ["comando 1", "comando 2"],
+  "importantFiles": ["path/archivo1", "path/archivo2"]
+}
+
+Reglas:
+- Fusioná la memoria previa con los hallazgos nuevos: si algo ya estaba y sigue
+  siendo válido, conservalo. Si hay información nueva, agregala. Si algo previo
+  quedó contradicho por los hallazgos nuevos, actualizalo.
+- No inventes nada que no esté en la memoria previa o en los hallazgos.
+- No agregues campos extra ni texto fuera del JSON.
+`.trim();
+
 export type AgentMode =
     | "normal"
     | "planning"
@@ -87,7 +111,8 @@ export type AgentMode =
     | "tester"
     | "reviewer"
     | "researcher_synthesis"
-    | "researcher_web";
+    | "researcher_web"
+    | "memory_synthesis";
 
 export interface ModeConfig {
     instructions: string;
@@ -126,6 +151,10 @@ const MODE_CONFIG: Record<AgentMode, ModeConfig> = {
     researcher_web: {
         instructions: RESEARCHER_WEB_INSTRUCTIONS,
         toolNames: ["web_search"]
+    },
+    memory_synthesis: {
+        instructions: MEMORY_SYNTHESIS_INSTRUCTIONS,
+        toolNames: []
     }
 };
 
@@ -168,7 +197,8 @@ export async function runAgentTurn(
 
     while (true) {
         iterations++;
-        const response = await createAgentResponse(conversation, modeConfig, options);        appendResponseOutput(conversation, response.output);
+        const response = await createAgentResponse(conversation, modeConfig, options);
+        appendResponseOutput(conversation, response.output);
         const toolCalls = findToolCalls(response.output);
 
         if (toolCalls.length === 0) {
