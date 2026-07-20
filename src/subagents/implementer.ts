@@ -1,5 +1,5 @@
 import type { ResponseInputItem } from "openai/resources/responses/responses";
-import { runAgentTurn } from "../agent/harness";
+import { runAgentTurn, type ToolCallLogEntry } from "../agent/harness";
 import type { AgentConfig } from "../policies/config";
 import {
     type SubagentResult,
@@ -46,11 +46,7 @@ ${summarizeForPrompt(taskState)}
         });
         const sources = repositorySourcesFromToolLog(turnResult.toolCallLog);
         const filesTouched = writtenFilesFromToolLog(turnResult.toolCallLog);
-        const blockedActions = turnResult.toolCallLog.filter((entry) => {
-            if (entry.tool !== "write_file" && entry.tool !== "run_command") return false;
-            if (entry.denied) return true;
-            return entry.tool === "write_file" && "error" in (entry.rawOutput as object);
-        });
+        const blockedActions = computeBlockedActions(turnResult.toolCallLog);
         const blockedByApproval = blockedActions.some((entry) =>
             Boolean((entry.rawOutput as { rejected?: boolean }).rejected)
         );
@@ -101,4 +97,39 @@ ${summarizeForPrompt(taskState)}
         recordSubagentResult(taskState, result);
         return result;
     }
+}
+
+/**
+ * Antes: cualquier write_file/run_command que hubiera fallado ALGUNA VEZ en
+ * el historial contaba como "bloqueado", incluso si el agente se dio cuenta
+ * solo, corrigió el problema (ej: creó una carpeta faltante) y reintentó
+ * con éxito. Eso generaba falsos "failed" para corridas que en realidad
+ * terminaron bien.
+ *
+ * Ahora: solo miramos el ÚLTIMO intento sobre cada path (para write_file) o
+ * cada comando (para run_command). Si ese último intento fue denegado,
+ * rechazado por el usuario, o falló, ahí sí cuenta como bloqueo real.
+ */
+function computeBlockedActions(log: ToolCallLogEntry[]): ToolCallLogEntry[] {
+    const modifying = log.filter((e) => e.tool === "write_file" || e.tool === "run_command");
+
+    const lastAttemptByTarget = new Map<string, ToolCallLogEntry>();
+    for (const entry of modifying) {
+        const key = `${entry.tool}:${targetKey(entry)}`;
+        lastAttemptByTarget.set(key, entry); // el log está en orden cronológico: la última sobreescribe
+    }
+
+    return [...lastAttemptByTarget.values()].filter((entry) => {
+        if (entry.denied) return true;
+        return entry.tool === "write_file" && isErrorOutput(entry.rawOutput);
+    });
+}
+
+function targetKey(entry: ToolCallLogEntry): string {
+    const args = entry.args as { path?: string; command?: string };
+    return args.path ?? args.command ?? JSON.stringify(entry.args);
+}
+
+function isErrorOutput(rawOutput: unknown): boolean {
+    return typeof rawOutput === "object" && rawOutput !== null && "error" in rawOutput;
 }

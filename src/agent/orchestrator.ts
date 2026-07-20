@@ -9,7 +9,7 @@ import {
     logProgress
 } from "./taskState";
 import type { AgentConfig } from "../policies/config";
-import { runExplorer } from "../subagents/explorer";
+import { runExplorerWithMemory } from "../subagents/explorer";
 import { runImplementer } from "../subagents/implementer";
 import { runResearcher } from "../subagents/researcher";
 import { runReviewer } from "../subagents/reviewer";
@@ -60,7 +60,7 @@ export interface OrchestratorDependencies {
     ): Promise<RoutingDecision>;
     assess(taskState: TaskState, conversation: ResponseInputItem[], config: AgentConfig, telemetry: Telemetry): Promise<AssessmentDecision>;
     synthesize(taskState: TaskState, conversation: ResponseInputItem[], config: AgentConfig, telemetry: Telemetry): Promise<string>;
-    explorer: typeof runExplorer;
+    explorer: typeof runExplorerWithMemory;
     researcher: typeof runResearcher;
     implementer: typeof runImplementer;
     tester: typeof runTester;
@@ -71,7 +71,7 @@ const DEFAULT_DEPENDENCIES: OrchestratorDependencies = {
     route: routeTask,
     assess: assessResults,
     synthesize: synthesizeResult,
-    explorer: runExplorer,
+    explorer: runExplorerWithMemory,
     researcher: runResearcher,
     implementer: runImplementer,
     tester: runTester,

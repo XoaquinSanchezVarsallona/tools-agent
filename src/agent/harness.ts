@@ -46,14 +46,6 @@ dependencias, convenciones y archivos relevantes. No inventes nada que no hayas 
 Respondé con un resumen claro y estructurado.
 `.trim();
 
-const IMPLEMENTER_INSTRUCTIONS = `
-Sos el subagente Implementer dentro de un sistema multi-agente de coding.
-Implementá únicamente los cambios pedidos, respetando la arquitectura y las políticas existentes.
-Leé los archivos relevantes antes de editarlos, no inventes contenido y mantené los cambios mínimos.
-Usá write_file solo para cambios necesarios y run_command para verificaciones relevantes.
-Si falta evidencia o una acción es denegada, explicalo explícitamente.
-`.trim();
-
 const TESTER_INSTRUCTIONS = `
 Sos el subagente Tester dentro de un sistema multi-agente de coding.
 Verificá el pedido con evidencia reproducible: leé lo necesario y ejecutá los comandos más acotados.
@@ -110,6 +102,16 @@ Reglas:
 - No inventes: si buscás y no encontrás nada confiable, decilo.
 - Al terminar, sintetizá una respuesta concreta citando de qué fuente sale
   cada afirmación relevante.
+`.trim();
+
+const IMPLEMENTER_INSTRUCTIONS = `
+Sos el subagente Implementer dentro de un sistema multi-agente de coding.
+Implementá únicamente los cambios pedidos, respetando la arquitectura y las políticas existentes.
+Leé los archivos relevantes antes de editarlos, no inventes contenido y mantené los cambios mínimos.
+Usá write_file solo para cambios necesarios y run_command para verificaciones relevantes.
+Si agregás una dependencia nueva a package.json, ejecutá npm install para instalarla de verdad
+antes de correr tests que la usen — editar package.json a mano no la instala.
+Si falta evidencia o una acción es denegada, explicalo explícitamente.
 `.trim();
 
 const MEMORY_SYNTHESIS_INSTRUCTIONS = `
