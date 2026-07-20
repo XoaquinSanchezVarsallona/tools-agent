@@ -185,7 +185,7 @@ The checked-in configuration denies these paths and commands:
 }
 ```
 
-Denied operations cannot be executed even when supervision is off. With supervision enabled, modifying tools such as file writes and command execution prompt for `y` or `n` before running. Commands listed under `policies.approvalCommands`—currently `npm install`, `npm i`, `git commit`, and `pip install`—require approval according to policy. Keep supervision enabled when operating on valuable or unfamiliar workspaces.
+Denied operations cannot be executed even when supervision is off. With supervision enabled, modifying tools such as file writes and command execution prompt for `y` or `n` before running. Commands listed under `policies.approvalCommands`—currently `npm install`, `npm i`, `git commit`, and `pip install`—also prompt for explicit approval while supervision is enabled. Turning supervision off bypasses these approval prompts, but it does not override denied-operation policies. Keep supervision enabled when operating on valuable or unfamiliar workspaces.
 
 ## Telemetry
 

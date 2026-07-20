@@ -250,6 +250,16 @@ Tune `topK` and `minScore` together using representative queries. A threshold th
 
 The ingestion entrypoint is [`src/rag/ingest.ts`](./src/rag/ingest.ts). It performs these steps:
 
+### Prerequisites and cost
+
+Before running ingestion:
+
+- Install the project dependencies with `npm install`.
+- Set a valid `OPENAI_API_KEY` in `.env`; ingestion sends every generated chunk to the OpenAI embeddings API.
+- Ensure the machine has internet access to OpenAI. URL sources additionally require network access to each source host.
+- Review the configured `embeddingModel` and source set before starting. Embedding API usage is billable, and re-ingesting sources generates new embeddings and may incur additional charges.
+- Create `rag.sources.json` in the repository root and run the command from that directory.
+
 1. Load environment variables and `agent.config.json`.
 2. Resolve the vector-store path from `config.paths.rag`.
 3. Load source declarations from root-level `rag.sources.json`.
