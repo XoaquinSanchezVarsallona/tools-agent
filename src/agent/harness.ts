@@ -359,7 +359,7 @@ async function handleToolCall(
     return { error: policy.reason };
   }
 
-  const modifying = toolName === "write_file" || toolName === "run_command" || toolName === "memory_write";
+  const modifying = toolName === "write_file" || toolName === "run_command";
   if (policy.requiresApproval || (options.supervisionMode && modifying)) {
     const approved = await options.confirmAction?.(
       describeToolCall(toolName, args)

@@ -4,7 +4,7 @@ import { runCommandTool } from "./runCommand";
 import { listFilesTool } from "./listFiles";
 import { ragSearchTool } from "./ragSearch";
 import { webSearchTool } from "./webSearch";
-import { memoryReadTool, memoryWriteTool } from "./memory";
+import { memoryReadTool } from "./memory";
 
 export const toolRegistry = {
   read_file: readFileTool,
@@ -13,8 +13,7 @@ export const toolRegistry = {
   run_command: runCommandTool,
   rag_search: ragSearchTool,
   web_search: webSearchTool,
-  memory_read: memoryReadTool,
-  memory_write: memoryWriteTool
+  memory_read: memoryReadTool
 };
 
 export type ToolName = keyof typeof toolRegistry;

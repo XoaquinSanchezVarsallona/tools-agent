@@ -109,22 +109,6 @@ const toolDefinitionsByName: Record<ToolName, FunctionTool> = {
       required: [],
       additionalProperties: false
     }
-  },
-  memory_write: {
-    type: "function" as const,
-    name: "memory_write",
-    description: "Actualiza un resumen pequeno de la memoria del proyecto.",
-    strict: true,
-    parameters: {
-      type: "object",
-      properties: {
-        summary: { type: "string" },
-        importantFiles: { type: "array", items: { type: "string" } },
-        conventions: { type: "array", items: { type: "string" } }
-      },
-      required: ["summary", "importantFiles", "conventions"],
-      additionalProperties: false
-    }
   }
 };
 

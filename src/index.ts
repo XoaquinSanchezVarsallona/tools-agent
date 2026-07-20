@@ -6,7 +6,7 @@ import {
   resolveUserIntent,
   runAgentTurn
 } from "./agent/harness";
-import { shutdownLangfuse, startLangfuse } from "./componentAgent/instrumentation";
+import { shutdownLangfuse, startLangfuse } from "./observability";
 
 const rl = readline.createInterface({ input, output });
 const conversation: ResponseInputItem[] = [];
