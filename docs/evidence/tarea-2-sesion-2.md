@@ -46,6 +46,4 @@ Pegá uno de estos:
 
 Decime también **qué tipo de “función chica” querés** (ej: `GET /users/:id`, `GET /users/count`, helper en `models`, etc.). Con eso la implemento siguiendo esas convenciones y te enumero explícitamente qué “recuerdos” apliqué.
 
-## Qué se observa
 
-_(completar a mano con la interpretación de este resultado para el informe)_
