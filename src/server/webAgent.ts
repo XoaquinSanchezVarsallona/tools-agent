@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ResponseInputItem } from "openai/resources/responses/responses";
 import { resolveUserIntent, runAgentTurn, type AgentMode } from "../agent/harness";
-import { startLangfuse } from "../componentAgent/instrumentation";
+import { startLangfuse } from "../observability";
 
 const conversation: ResponseInputItem[] = [];
 const sessionState = {

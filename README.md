@@ -55,10 +55,10 @@ La consola muestra solamente la respuesta final y las confirmaciones de segurida
 
 El agente principal recibe el pedido, crea un estado compartido y coordina cinco subagentes secuenciales:
 
-1. **Explorer**: inspecciona estructura, dependencias, convenciones y archivos relevantes.
-2. **Researcher**: consulta primero el RAG y usa busqueda web solo si la evidencia local es insuficiente.
-3. **Implementer**: escribe el componente React, su CSS y sus stories.
-4. **Tester**: ejecuta `npm run typecheck` y `npm run build-storybook`.
+1. **Explorer**: inspecciona estructura, dependencias, estilos, scripts, convenciones y archivos relevantes.
+2. **Researcher**: consulta primero el RAG cuando el pedido requiere evidencia de diseno y usa busqueda web solo si resulta insuficiente.
+3. **Implementer**: realiza el cambio solicitado respetando la arquitectura, las librerias y los estilos existentes.
+4. **Tester**: ejecuta solamente las validaciones relevantes disponibles en el proyecto.
 5. **Reviewer**: revisa los archivos, el pedido, las fuentes y los resultados de validacion.
 
 Si Tester o Reviewer detectan un problema, se permite un unico ciclo adicional de Implementer, Tester y Reviewer. Una segunda falla deja la tarea en estado `blocked`.

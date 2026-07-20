@@ -41,22 +41,22 @@ const SUBAGENTS: Record<SubagentName, SubagentDefinition> = {
   explorer: {
     name: "explorer",
     tools: ["list_files", "read_file", "memory_read"],
-    instructions: `Sos Explorer. Entende la estructura, dependencias, convenciones y archivos relevantes para el pedido. Usa las tools, no inventes contenido. Termina con un resumen breve de hallazgos.`
+    instructions: `Sos Explorer. Entende la estructura, dependencias, convenciones, sistema de estilos, librerias, scripts de validacion y archivos relevantes para el pedido. Usa las tools, no inventes contenido. Identifica que patrones existentes debe respetar Implementer y termina con un resumen breve de hallazgos.`
   },
   researcher: {
     name: "researcher",
     tools: ["rag_search", "web_search", "memory_read"],
-    instructions: `Sos Researcher. Consulta obligatoriamente rag_search antes de decidir. Usa web_search solo si el resultado RAG dice sufficient=false. Distingue fuentes RAG, web y memoria. Termina listando evidencia y URLs.`
+    instructions: `Sos Researcher. Evalua si el pedido necesita lineamientos de diseno o evidencia externa. Cuando sea relevante, consulta rag_search primero y usa web_search solo si el RAG resulta insuficiente. Si no hace falta investigar, indicalo sin forzar fuentes irrelevantes. Distingue RAG, web, memoria e inferencias y termina con evidencia breve y URLs cuando existan.`
   },
   implementer: {
     name: "implementer",
     tools: ["read_file", "list_files", "write_file"],
-    instructions: `Sos Implementer. Crea un componente React TypeScript aislado que satisfaga el pedido y use la evidencia disponible. Infiere un nombre PascalCase y escribe exactamente tres archivos bajo src/components/generated/{Nombre}/: {Nombre}.tsx, {Nombre}.css y {Nombre}.stories.tsx. No agregues dependencias. La story debe tener al menos tres variantes. Usa write_file y termina resumiendo los cambios.`
+    instructions: `Sos Implementer. Implementa solamente el cambio solicitado usando los hallazgos de Explorer y la evidencia disponible. No asumas que el pedido es un componente ni impongas una estructura propia: respeta la arquitectura, librerias, componentes y estrategia de estilos existentes. Reutiliza archivos y convenciones del proyecto antes de crear otros. Crea stories u otros archivos auxiliares solo si el usuario los pide o si el repositorio ya los usa y son necesarios para el cambio. No instales, inicialices ni configures herramientas por iniciativa propia. Usa write_file y termina con un resumen breve.`
   },
   tester: {
     name: "tester",
     tools: ["run_command"],
-    instructions: `Sos Tester. Valida el resultado ejecutando exactamente npm run typecheck y npm run build-storybook. No escribas tests ni modifiques archivos. Informa STATUS: PASS solo si ambos comandos terminan con exitCode 0; de lo contrario informa STATUS: FAIL y los errores concretos.`
+    instructions: `Sos Tester. Valida el cambio con la menor cantidad de comandos relevantes que Explorer haya confirmado que existen en el proyecto. No inventes scripts, no instales dependencias, no inicialices herramientas y no modifiques archivos. Informa STATUS: PASS si las validaciones ejecutadas terminan correctamente, STATUS: FAIL si alguna falla o STATUS: NO_CHECK si el proyecto no ofrece una validacion aplicable.`
   },
   reviewer: {
     name: "reviewer",
@@ -203,7 +203,7 @@ export async function runAgentTurn(
         state.stage = "done";
         await rememberTask(state);
         await saveLastRun(state);
-        const result = "✓ Componente generado y listo en Storybook.";
+        const result = "Cambio implementado.";
         task.update({ output: { result, state }, metadata: { status: state.stage } } as any);
         setActiveTraceIO({ output: { result, state } });
         return result;
