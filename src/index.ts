@@ -61,7 +61,12 @@ async function main() {
       if (commandResult === "exit") break;
       if (commandResult === "handled") continue;
 
-      const intent = await resolveUserIntent(userInput, state.mode, state.lastPlan);
+      const intent = await resolveUserIntent(
+        userInput,
+        state.mode,
+        state.lastPlan,
+        conversation
+      );
       const executeLastPlan =
         state.mode === "planning" && intent.action === "implement";
 

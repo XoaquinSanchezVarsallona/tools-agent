@@ -39,7 +39,12 @@ export async function handleAgentRequest(req: IncomingMessage, res: ServerRespon
       return;
     }
 
-    const intent = await resolveUserIntent(message, sessionState.mode, sessionState.lastPlan);
+    const intent = await resolveUserIntent(
+      message,
+      sessionState.mode,
+      sessionState.lastPlan,
+      conversation
+    );
     const executeLastPlan = sessionState.mode === "planning" && intent.action === "implement";
     const turnMode: AgentMode = executeLastPlan ? "normal" : sessionState.mode;
 

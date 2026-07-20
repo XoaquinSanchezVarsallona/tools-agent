@@ -68,7 +68,8 @@ const SUBAGENTS: Record<SubagentName, SubagentDefinition> = {
 export async function resolveUserIntent(
   userMessage: string,
   mode: AgentMode,
-  lastPlan?: string
+  lastPlan?: string,
+  conversation: ResponseInputItem[] = []
 ): Promise<UserIntent> {
   if (mode === "planning" && !lastPlan) {
     return {
@@ -80,13 +81,18 @@ export async function resolveUserIntent(
   return startActiveObservation(
     "agent-user-intent",
     async (observation) => {
-      const input = { userMessage, mode, lastPlan };
+      const input = {
+        userMessage,
+        mode,
+        lastPlan,
+        recentConversation: conversation.slice(-6)
+      };
       observation.update({ input } as any);
 
       try {
         const response = await getLlm().responses.create({
           model: MODEL,
-          instructions: `Sos el agente principal y enrutas el pedido. En modo normal, usa answer para consultas que solo requieren informacion y implement cuando el usuario pide crear o modificar codigo. En modo planning con un plan anterior, usa implement solo si autoriza ejecutar ese plan ahora; usa keep_planning para preguntas, ajustes, negativas o ambiguedad. No ejecutes tools.`,
+          instructions: `Sos el agente principal y enrutas el pedido usando el mensaje actual y la conversacion reciente. En modo normal, usa answer solo para consultas informativas. Usa implement cuando el usuario pide cambios concretos en el proyecto, continua un pedido anterior o autoriza realizarlo, aunque el mensaje actual sea breve o haga referencia al contexto. En modo planning con un plan anterior, usa implement solo si autoriza ejecutar ese plan ahora; usa keep_planning para preguntas, ajustes, negativas o ambiguedad. No ejecutes tools.`,
           input: JSON.stringify(input),
           text: {
             format: {
@@ -245,6 +251,9 @@ export async function runAgentTurn(
         const definition = SUBAGENTS[name];
         const prompt = [
           `Pedido actual: ${state.originalRequest}`,
+          conversation.length > 0
+            ? `Contexto reciente de conversacion: ${JSON.stringify(conversation.slice(-6))}`
+            : "",
           options.planContext
             ? options.mode === "normal"
               ? `Plan aprobado por el usuario:\n${options.planContext}`

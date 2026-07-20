@@ -33,6 +33,22 @@ npm start
 npm run agent
 ```
 
+Para usar el agente desde otro proyecto, primero se vincula globalmente desde
+este repositorio:
+
+```bash
+npm link
+```
+
+Luego, desde la raiz del proyecto que se quiere modificar:
+
+```bash
+design-agent
+```
+
+El comando inicia el mismo CLI y utiliza el directorio actual como workspace,
+mientras conserva la configuracion y el RAG del agente.
+
 Ejemplo de pedido:
 
 ```text
