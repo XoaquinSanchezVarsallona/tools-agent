@@ -3,13 +3,16 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "bin": {
+    "design-agent": "bin/design-agent.cjs"
+  },
   "scripts": {
-    "agent": "tsx src/index.ts",
+    "agent": "tsx src/start.ts",
     "rag:ingest": "tsx src/rag/ingest.ts",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "typecheck": "tsc --noEmit",
-    "start": "tsx src/index.ts"
+    "start": "tsx src/start.ts"
   },
   "repository": {
     "type": "git",

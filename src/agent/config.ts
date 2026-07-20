@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { ToolName } from "../tools";
+import { agentRoot, workspaceRoot } from "../runtimePaths";
 
 export type AgentConfig = {
   workspace: string;
@@ -10,7 +11,7 @@ export type AgentConfig = {
 
 export async function loadAgentConfig(): Promise<AgentConfig> {
   const config = JSON.parse(
-    await fs.readFile(path.resolve("agent.config.json"), "utf-8")
+    await fs.readFile(path.join(agentRoot, "agent.config.json"), "utf-8")
   ) as AgentConfig;
 
   if (
@@ -23,7 +24,7 @@ export async function loadAgentConfig(): Promise<AgentConfig> {
     throw new Error("agent.config.json is invalid");
   }
 
-  return config;
+  return { ...config, workspace: workspaceRoot };
 }
 
 export function checkPolicy(
