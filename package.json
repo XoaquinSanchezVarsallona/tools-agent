@@ -12,7 +12,8 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "typecheck": "tsc --noEmit",
-    "start": "tsx src/start.ts"
+    "start": "tsx src/start.ts",
+    "web": "vite"
   },
   "repository": {
     "type": "git",

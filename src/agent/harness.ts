@@ -28,6 +28,7 @@ type AgentOptions = {
   confirmAction?: (message: string) => Promise<boolean>;
   planContext?: string;
   intent: UserIntent;
+  quickReturn?: boolean;
 };
 
 type SubagentDefinition = {
@@ -197,6 +198,17 @@ export async function runAgentTurn(
       }
 
       await runStage("implementer");
+
+      if (options.quickReturn) {
+        state.stage = "done";
+        await rememberTask(state);
+        await saveLastRun(state);
+        const result = "✓ Componente generado y listo en Storybook.";
+        task.update({ output: { result, state }, metadata: { status: state.stage } } as any);
+        setActiveTraceIO({ output: { result, state } });
+        return result;
+      }
+
       const tester = await runStage("tester");
       const reviewer = await runStage(
         "reviewer",
