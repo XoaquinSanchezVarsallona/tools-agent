@@ -1,0 +1,314 @@
+:root {
+  --xo-bg: #ffffff;
+  --xo-ink: #0b0b16;
+  --xo-neon: #21f38b;
+  --xo-neon2: #00d4ff;
+  --xo-pink: #ff3bd4;
+  --xo-yellow: #ffd400;
+  --xo-border: rgba(0, 0, 0, 0.85);
+  --xo-shadow: rgba(0, 0, 0, 0.2);
+  --xo-grid: rgba(0, 0, 0, 0.05);
+  --xo-font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+    "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+.xoacoCard {
+  font-family: var(--xo-font);
+  color: var(--xo-ink);
+  background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+  border: 3px solid var(--xo-border);
+  border-radius: 26px;
+  box-shadow: 0 18px 0 var(--xo-shadow), 0 30px 40px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  width: min(720px, 100%);
+}
+
+.xoacoHeader {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 14px 10px;
+  background: radial-gradient(600px 120px at 10% 0%, rgba(255, 59, 212, 0.18), transparent 60%),
+    radial-gradient(600px 120px at 90% 0%, rgba(0, 212, 255, 0.18), transparent 60%),
+    linear-gradient(180deg, rgba(255, 212, 0, 0.12), transparent);
+  border-bottom: 3px solid var(--xo-border);
+}
+
+.xoacoBadge {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  color: var(--xo-ink);
+  background: linear-gradient(135deg, var(--xo-neon) 0%, var(--xo-neon2) 100%);
+  border: 2px solid var(--xo-border);
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.22);
+}
+
+.xoacoTitleWrap {
+  line-height: 1.05;
+}
+
+.xoacoTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+
+.xoacoSubtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 650;
+  opacity: 0.7;
+}
+
+.xoacoLights {
+  display: inline-flex;
+  gap: 7px;
+}
+
+.xoacoLight {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 2px solid var(--xo-border);
+  opacity: 0.95;
+}
+
+.xoacoRed {
+  background: #ff4666;
+}
+
+.xoacoYellow {
+  background: var(--xo-yellow);
+}
+
+.xoacoGreen {
+  background: var(--xo-neon);
+}
+
+.xoacoScreen {
+  position: relative;
+  padding: 12px;
+  background: repeating-linear-gradient(0deg, var(--xo-grid) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(90deg, var(--xo-grid) 0 1px, transparent 1px 22px), #ffffff;
+}
+
+.xoacoScanlines {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 3px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  opacity: 0.6;
+}
+
+.xoacoMessages {
+  position: relative;
+  height: 340px;
+  overflow: auto;
+  padding: 8px;
+  border-radius: 20px;
+  border: 2px solid var(--xo-border);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.xoacoRow {
+  display: flex;
+  margin: 10px 0;
+}
+
+.xoacoRow.isUser {
+  justify-content: flex-end;
+}
+
+.xoacoRow.isAssistant {
+  justify-content: flex-start;
+}
+
+.xoacoBubble {
+  max-width: 85%;
+  border-radius: 20px;
+  padding: 10px 12px;
+  border: 2px solid var(--xo-border);
+  background: #ffffff;
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.12);
+}
+
+.xoacoRow.isUser .xoacoBubble {
+  background: linear-gradient(180deg, rgba(0, 212, 255, 0.16), rgba(255, 255, 255, 0.9));
+}
+
+.xoacoRow.isAssistant .xoacoBubble {
+  background: linear-gradient(180deg, rgba(255, 212, 0, 0.14), rgba(255, 255, 255, 0.9));
+}
+
+.xoacoRole {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  opacity: 0.7;
+  margin-bottom: 6px;
+}
+
+.xoacoText {
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  font-weight: 550;
+}
+
+.xoacoStoryLink {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  text-decoration: none;
+  color: var(--xo-ink);
+  background: linear-gradient(135deg, var(--xo-neon) 0%, var(--xo-neon2) 100%);
+  border: 2px solid var(--xo-border);
+  border-radius: 14px;
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+}
+
+.xoacoStoryLink:hover {
+  filter: brightness(1.04) saturate(1.05);
+}
+
+.xoacoStoryLink:active {
+  transform: translateY(3px);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.15);
+}
+
+.xoacoInputBar {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.xoacoInput {
+  font-family: var(--xo-font);
+  color: var(--xo-ink);
+  background: #ffffff;
+  border: 2px solid var(--xo-border);
+  border-radius: 18px;
+  padding: 10px 12px;
+  outline: none;
+}
+
+.xoacoInput:focus {
+  border-color: var(--xo-neon2);
+  box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.2);
+}
+
+.xoacoInput:disabled {
+  opacity: 0.6;
+}
+
+.xoacoSend {
+  font-family: var(--xo-font);
+  font-weight: 900;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--xo-ink);
+  background: linear-gradient(135deg, var(--xo-neon) 0%, var(--xo-neon2) 100%);
+  border: 3px solid var(--xo-border);
+  border-radius: 18px;
+  padding: 10px 14px;
+  cursor: pointer;
+  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.2);
+  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+}
+
+.xoacoSend:hover {
+  filter: brightness(1.04) saturate(1.05);
+}
+
+.xoacoSend:active {
+  transform: translateY(4px);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.2);
+}
+
+.xoacoSend:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  filter: grayscale(0.2);
+}
+
+.xoacoDots i {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 999px;
+  background: var(--xo-neon2);
+  border: 1px solid var(--xo-border);
+  animation: xoDot 1s infinite ease-in-out;
+}
+
+.xoacoDots i:nth-child(2) {
+  animation-delay: 0.15s;
+  background: var(--xo-neon);
+}
+
+.xoacoDots i:nth-child(3) {
+  animation-delay: 0.3s;
+  background: var(--xo-pink);
+  margin-right: 0;
+}
+
+@keyframes xoDot {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+
+  50% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+.xoacoFooter {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--xo-ink);
+  opacity: 0.85;
+  border-top: 3px solid var(--xo-border);
+  background: linear-gradient(135deg, var(--xo-neon), var(--xo-neon2), var(--xo-pink), var(--xo-yellow));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xoacoSend {
+    transition: none;
+  }
+  .xoacoDots i {
+    animation: none;
+  }
+}

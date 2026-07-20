@@ -1,0 +1,264 @@
+.FrivNavbar {
+  --fn-outline: #0a0a12;
+
+  position: relative;
+  width: 100%;
+  background:
+    radial-gradient(1400px 180px at 15% 0%, rgba(255, 61, 187, 0.35), transparent 55%),
+    radial-gradient(1200px 220px at 55% 0%, rgba(39, 182, 255, 0.35), transparent 55%),
+    radial-gradient(1200px 240px at 90% 0%, rgba(138, 91, 255, 0.25), transparent 60%),
+    linear-gradient(180deg, #0e0d1e 0%, #080818 100%);
+  border-bottom: 3px solid var(--fn-outline);
+  box-shadow: 0 10px 0 rgba(0, 0, 0, 0.35);
+}
+
+.FrivNavbar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 18px 18px;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.FrivNavbar__inner {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.FrivNavbar__brand {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  padding: 10px 14px;
+  border: 3px solid var(--fn-outline);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffe84a 0%, #ffb13d 100%);
+  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.35);
+  transform: translateY(-1px);
+}
+
+.FrivNavbar__brandText {
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial,
+    "Noto Sans", "Helvetica Neue", sans-serif;
+  font-weight: 900;
+  letter-spacing: 1px;
+  font-size: 16px;
+  color: #1b1233;
+  text-shadow:
+    -2px -2px 0 #fff,
+    2px -2px 0 #fff,
+    -2px 2px 0 #fff,
+    2px 2px 0 #fff,
+    0 3px 0 rgba(0, 0, 0, 0.25);
+}
+
+.FrivNavbar__brandShine {
+  position: absolute;
+  inset: 2px;
+  border-radius: 14px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.65),
+    rgba(255, 255, 255, 0) 60%
+  );
+  pointer-events: none;
+}
+
+.FrivNavbar__center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.FrivNavbar__tabs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.FrivNavbar__tab {
+  position: relative;
+  appearance: none;
+  border: 3px solid var(--fn-outline);
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-weight: 900;
+  letter-spacing: 0.4px;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 7px 0 rgba(0, 0, 0, 0.35);
+  color: #0b0b10;
+  background: linear-gradient(180deg, #e0f6ff 0%, #6ad7ff 100%);
+  transform: translateY(-1px);
+}
+
+.FrivNavbar__tab--pink {
+  background: linear-gradient(180deg, #ffe1f4 0%, #ff86d3 100%);
+}
+.FrivNavbar__tab--blue {
+  background: linear-gradient(180deg, #e0f6ff 0%, #6ad7ff 100%);
+}
+.FrivNavbar__tab--green {
+  background: linear-gradient(180deg, #dcffe9 0%, #52ff9a 100%);
+}
+.FrivNavbar__tab--yellow {
+  background: linear-gradient(180deg, #fffbd6 0%, #ffe84a 100%);
+}
+.FrivNavbar__tab--purple {
+  background: linear-gradient(180deg, #eee6ff 0%, #b193ff 100%);
+}
+
+.FrivNavbar__tabShine {
+  position: absolute;
+  inset: 2px;
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.7),
+    rgba(255, 255, 255, 0) 55%
+  );
+  pointer-events: none;
+}
+
+.FrivNavbar__tab:hover {
+  filter: saturate(1.05) contrast(1.03);
+  transform: translateY(-2px);
+}
+
+.FrivNavbar__tab:active {
+  transform: translateY(2px);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+
+.FrivNavbar__tab.is-active {
+  outline: 3px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 2px;
+}
+
+.FrivNavbar__tab:focus-visible,
+.FrivNavbar__brand:focus-visible,
+.FrivNavbar__chip:focus-visible,
+.FrivNavbar__searchInput:focus-visible,
+.FrivNavbar__searchBtn:focus-visible {
+  outline: 3px solid rgba(255, 255, 255, 0.95);
+  outline-offset: 3px;
+}
+
+.FrivNavbar__search {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 260px;
+  max-width: 420px;
+  width: 40%;
+}
+
+.FrivNavbar__searchInput {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 3px solid var(--fn-outline);
+  background: linear-gradient(180deg, #ffffff 0%, #e9f2ff 100%);
+  box-shadow: 0 7px 0 rgba(0, 0, 0, 0.35);
+  font-weight: 800;
+  color: #1b1233;
+}
+
+.FrivNavbar__searchBtn {
+  position: relative;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 3px solid var(--fn-outline);
+  background: linear-gradient(180deg, #ff3dbb 0%, #ff7ad2 100%);
+  box-shadow: 0 7px 0 rgba(0, 0, 0, 0.35);
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  color: #1b1233;
+  cursor: pointer;
+}
+
+.FrivNavbar__searchBtnShine {
+  position: absolute;
+  inset: 2px;
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.65),
+    rgba(255, 255, 255, 0) 55%
+  );
+  pointer-events: none;
+}
+
+.FrivNavbar__searchBtn:hover {
+  transform: translateY(-1px);
+}
+
+.FrivNavbar__searchBtn:active {
+  transform: translateY(2px);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+
+.FrivNavbar__right {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.FrivNavbar__rightDefault {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.FrivNavbar__chip {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 3px solid var(--fn-outline);
+  background: linear-gradient(180deg, #f2f7ff 0%, #b9d7ff 100%);
+  box-shadow: 0 7px 0 rgba(0, 0, 0, 0.35);
+  font-weight: 900;
+  color: #0b0b10;
+}
+
+.FrivNavbar__chip--hot {
+  background: linear-gradient(180deg, #dcffe9 0%, #27ff7a 100%);
+}
+
+@media (max-width: 860px) {
+  .FrivNavbar__inner {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .FrivNavbar__center {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .FrivNavbar__search {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .FrivNavbar__right {
+    justify-content: flex-start;
+  }
+}
