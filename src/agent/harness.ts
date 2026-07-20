@@ -4,7 +4,7 @@ import type {
 } from "openai/resources/responses/responses";
 import { setActiveTraceIO, startActiveObservation } from "@langfuse/tracing";
 import { loadAgentConfig, checkPolicy, type AgentConfig } from "./config";
-import { readProjectMemory, rememberTask } from "./memory";
+import { readProjectMemory, rememberTask, saveLastRun } from "./memory";
 import {
   createTaskState,
   summarizeState,
@@ -17,10 +17,17 @@ import { toolRegistry, type ToolName } from "../tools";
 
 export type AgentMode = "normal" | "planning";
 
+export type UserIntent = {
+  action: "answer" | "implement" | "keep_planning";
+  reason: string;
+};
+
 type AgentOptions = {
   mode: AgentMode;
   supervisionMode: boolean;
   confirmAction?: (message: string) => Promise<boolean>;
+  planContext?: string;
+  intent: UserIntent;
 };
 
 type SubagentDefinition = {
@@ -53,9 +60,91 @@ const SUBAGENTS: Record<SubagentName, SubagentDefinition> = {
   reviewer: {
     name: "reviewer",
     tools: ["read_file"],
-    instructions: `Sos Reviewer. Revisa que los archivos modificados respondan al pedido, usen la evidencia y que las validaciones hayan pasado. Lee los archivos relevantes. Termina con STATUS: PASS o STATUS: NEEDS_CHANGES y una explicacion breve.`
+    instructions: `Sos Reviewer. Usa los hallazgos y lee archivos relevantes cuando sea necesario. Responde de forma directa, sin introducciones, repeticiones ni secciones innecesarias. Respeta estrictamente el formato y limite indicados para la tarea actual.`
   }
 };
+
+export async function resolveUserIntent(
+  userMessage: string,
+  mode: AgentMode,
+  lastPlan?: string
+): Promise<UserIntent> {
+  if (mode === "planning" && !lastPlan) {
+    return {
+      action: "keep_planning",
+      reason: "Primer pedido del modo planificacion."
+    };
+  }
+
+  return startActiveObservation(
+    "agent-user-intent",
+    async (observation) => {
+      const input = { userMessage, mode, lastPlan };
+      observation.update({ input } as any);
+
+      try {
+        const response = await getLlm().responses.create({
+          model: MODEL,
+          instructions: `Sos el agente principal y enrutas el pedido. En modo normal, usa answer para consultas que solo requieren informacion y implement cuando el usuario pide crear o modificar codigo. En modo planning con un plan anterior, usa implement solo si autoriza ejecutar ese plan ahora; usa keep_planning para preguntas, ajustes, negativas o ambiguedad. No ejecutes tools.`,
+          input: JSON.stringify(input),
+          text: {
+            format: {
+              type: "json_schema",
+              name: "user_intent",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  action: {
+                    type: "string",
+                    enum: ["answer", "implement", "keep_planning"]
+                  },
+                  reason: { type: "string" }
+                },
+                required: ["action", "reason"],
+                additionalProperties: false
+              }
+            }
+          }
+        });
+        const decision = JSON.parse(response.output_text) as UserIntent;
+
+        if (
+          (decision.action !== "answer" &&
+            decision.action !== "implement" &&
+            decision.action !== "keep_planning") ||
+          typeof decision.reason !== "string"
+        ) {
+          throw new Error("Invalid user intent response");
+        }
+
+        const normalizedDecision: UserIntent = {
+          ...decision,
+          action:
+            mode === "planning" && decision.action === "answer"
+              ? "keep_planning"
+              : mode === "normal" && decision.action === "keep_planning"
+                ? "answer"
+                : decision.action
+        };
+        observation.update({ output: normalizedDecision } as any);
+        return normalizedDecision;
+      } catch (error: unknown) {
+        const fallback: UserIntent = {
+          action: mode === "planning" ? "keep_planning" : "answer",
+          reason: "No se pudo clasificar el pedido; se eligio la opcion sin escritura."
+        };
+        observation.update({
+          level: "ERROR",
+          statusMessage: error instanceof Error ? error.message : String(error),
+          output: fallback
+        } as any);
+        return fallback;
+      }
+    },
+    { asType: "agent" }
+  );
+}
 
 export async function runAgentTurn(
   userMessage: string,
@@ -64,6 +153,7 @@ export async function runAgentTurn(
 ) {
   const config = await loadAgentConfig();
   const state = createTaskState(userMessage);
+  state.intent = options.intent;
   const memory = await readProjectMemory();
   state.sources.push({ kind: "memory", label: "Project memory" });
   const repeatedCalls = new Map<string, number>();
@@ -78,23 +168,49 @@ export async function runAgentTurn(
       await runStage("researcher");
 
       if (options.mode === "planning") {
-        const plan = await runStage("reviewer", "Estas en modo planificacion. No revises cambios: propone un plan numerado usando los hallazgos.");
+        const plan = await runStage(
+          "reviewer",
+          "Estas en modo planificacion. Propone un plan concreto de no mas de seis puntos breves. No incluyas STATUS ni detalles de trazabilidad."
+        );
         state.stage = "done";
-        const result = formatFinal(plan);
-        task.update({ output: result } as any);
+        state.sources.push({ kind: "inference", label: "Planning response", detail: plan });
+        await saveLastRun(state);
+        const result = cleanResponse(plan);
+        task.update({ output: { result, state } } as any);
+        setActiveTraceIO({ output: result });
+        return result;
+      }
+
+      if (options.intent.action === "answer") {
+        const answer = await runStage(
+          "reviewer",
+          "Responde directamente el pedido del usuario en un maximo de cuatro lineas. No propongas cambios, no incluyas STATUS y no describas el proceso interno."
+        );
+        state.stage = "done";
+        state.sources.push({ kind: "inference", label: "Direct answer", detail: answer });
+        await rememberTask(state);
+        await saveLastRun(state);
+        const result = cleanResponse(answer);
+        task.update({ output: { result, state } } as any);
         setActiveTraceIO({ output: result });
         return result;
       }
 
       await runStage("implementer");
       const tester = await runStage("tester");
-      const reviewer = await runStage("reviewer");
+      const reviewer = await runStage(
+        "reviewer",
+        "Revisa la implementacion y las validaciones. Primera linea: STATUS: PASS o STATUS: NEEDS_CHANGES. Luego resume el resultado en no mas de cuatro lineas."
+      );
 
       if (needsRepair(tester, reviewer, state)) {
         state.repairAttempted = true;
         await runStage("implementer", "Corregi solamente los errores informados por Tester o Reviewer. Este es el unico intento de reparacion.");
         const retryTester = await runStage("tester");
-        const retryReviewer = await runStage("reviewer");
+        const retryReviewer = await runStage(
+          "reviewer",
+          "Revisa la reparacion y las validaciones. Primera linea: STATUS: PASS o STATUS: NEEDS_CHANGES. Luego resume el resultado en no mas de cuatro lineas."
+        );
         state.stage = needsRepair(retryTester, retryReviewer, state) ? "blocked" : "done";
       } else {
         state.stage = "done";
@@ -106,7 +222,8 @@ export async function runAgentTurn(
         detail: state.progress.reviewer
       });
       await rememberTask(state);
-      const result = formatFinal(state.progress.reviewer ?? reviewer);
+      await saveLastRun(state);
+      const result = cleanResponse(state.progress.reviewer ?? reviewer);
       task.update({ output: { result, state }, metadata: { status: state.stage } } as any);
       setActiveTraceIO({ output: { result, state } });
       return result;
@@ -115,7 +232,12 @@ export async function runAgentTurn(
         state.stage = name;
         const definition = SUBAGENTS[name];
         const prompt = [
-          `Pedido original: ${state.originalRequest}`,
+          `Pedido actual: ${state.originalRequest}`,
+          options.planContext
+            ? options.mode === "normal"
+              ? `Plan aprobado por el usuario:\n${options.planContext}`
+              : `Plan anterior para revisar o ajustar:\n${options.planContext}`
+            : "",
           `Memoria del proyecto: ${JSON.stringify(memory)}`,
           `Estado compartido: ${summarizeState(state)}`,
           extra
@@ -142,21 +264,6 @@ export async function runAgentTurn(
         return output;
       }
 
-      function formatFinal(review: string) {
-        const sourceLines = state.sources
-          .filter((source, index, all) =>
-            all.findIndex((candidate) => candidate.kind === source.kind && candidate.url === source.url && candidate.label === source.label) === index
-          )
-          .map((source) => `- [${source.kind}] ${source.label}${source.url ? ` | ${source.url}` : ""}`);
-        return [
-          review,
-          `\nEstado: ${state.stage}`,
-          `Archivos modificados: ${state.modifiedFiles.join(", ") || "ninguno"}`,
-          `Comandos: ${state.commands.map((item) => `${item.command} -> ${item.exitCode}`).join(", ") || "ninguno"}`,
-          "Fuentes:",
-          sourceLines.join("\n") || "- ninguna"
-        ].join("\n");
-      }
     },
     { asType: "agent" }
   );
@@ -165,6 +272,12 @@ export async function runAgentTurn(
   conversation.push({ role: "assistant", content: finalText });
   if (conversation.length > 12) conversation.splice(0, conversation.length - 12);
   return { finalText, iterations: Object.keys(state.progress).length, state };
+}
+
+function cleanResponse(value: string) {
+  return value
+    .replace(/^STATUS:\s*(?:PASS|NEEDS_CHANGES|FAIL)\s*[-:—]?\s*/i, "")
+    .trim();
 }
 
 async function runSubagent(
@@ -249,7 +362,7 @@ async function handleToolCall(
   const modifying = toolName === "write_file" || toolName === "run_command" || toolName === "memory_write";
   if (policy.requiresApproval || (options.supervisionMode && modifying)) {
     const approved = await options.confirmAction?.(
-      `El agente quiere ejecutar ${toolName} con args: ${JSON.stringify(args, null, 2)}`
+      describeToolCall(toolName, args)
     );
     if (!approved) return { rejected: true, message: "El usuario rechazo la accion." };
   }
@@ -272,6 +385,16 @@ async function handleToolCall(
     state.errors.push(`${toolName}: ${message}`);
     return { error: message };
   }
+}
+
+function describeToolCall(toolName: ToolName, args: any) {
+  if (toolName === "run_command") {
+    return `Accion supervisada: ${toolName} ${String(args.command ?? "")}`;
+  }
+  if ("path" in (args ?? {})) {
+    return `Accion supervisada: ${toolName} ${String(args.path)}`;
+  }
+  return `Accion supervisada: ${toolName}`;
 }
 
 function recordToolResult(toolName: ToolName, args: any, output: any, state: TaskState) {

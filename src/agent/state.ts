@@ -15,6 +15,10 @@ export type TaskSource = {
 export type TaskState = {
   id: string;
   originalRequest: string;
+  intent: {
+    action: "answer" | "implement" | "keep_planning";
+    reason: string;
+  };
   stage: SubagentName | "done" | "blocked";
   progress: Partial<Record<SubagentName, string>>;
   sources: TaskSource[];
@@ -29,6 +33,7 @@ export function createTaskState(originalRequest: string): TaskState {
   return {
     id: `${Date.now()}`,
     originalRequest,
+    intent: { action: "answer", reason: "Not classified yet" },
     stage: "explorer",
     progress: {},
     sources: [],
@@ -43,6 +48,7 @@ export function createTaskState(originalRequest: string): TaskState {
 export function summarizeState(state: TaskState) {
   return JSON.stringify({
     originalRequest: state.originalRequest,
+    intent: state.intent,
     progress: state.progress,
     sources: state.sources,
     modifiedFiles: state.modifiedFiles,

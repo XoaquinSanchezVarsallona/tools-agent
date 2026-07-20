@@ -3,6 +3,7 @@ import path from "node:path";
 import type { TaskState } from "./state";
 
 const MEMORY_PATH = path.resolve(".agent/memory.json");
+const LAST_RUN_PATH = path.resolve(".agent/last-run.json");
 
 export type ProjectMemory = {
   architecture: string[];
@@ -62,6 +63,15 @@ export async function rememberTask(state: TaskState) {
   ]).slice(-20);
   memory.lastTaskSummary = `${state.originalRequest} -> ${state.stage}. ${state.errors.join(" ")}`;
   return writeProjectMemory(memory);
+}
+
+export async function saveLastRun(state: TaskState) {
+  await fs.mkdir(path.dirname(LAST_RUN_PATH), { recursive: true });
+  await fs.writeFile(
+    LAST_RUN_PATH,
+    `${JSON.stringify({ savedAt: new Date().toISOString(), ...state }, null, 2)}\n`,
+    "utf-8"
+  );
 }
 
 function unique(values: string[]) {

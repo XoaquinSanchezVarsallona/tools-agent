@@ -1,27 +1,27 @@
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type { ResponseInputItem } from "openai/resources/responses/responses";
-import { type AgentMode, runAgentTurn } from "./agent/harness";
+import {
+  type AgentMode,
+  resolveUserIntent,
+  runAgentTurn
+} from "./agent/harness";
 import { shutdownLangfuse, startLangfuse } from "./componentAgent/instrumentation";
 
 const rl = readline.createInterface({ input, output });
 const conversation: ResponseInputItem[] = [];
-const state = { mode: "normal" as AgentMode, supervisionMode: true };
+const state = {
+  mode: "normal" as AgentMode,
+  supervisionMode: true,
+  lastPlan: undefined as string | undefined
+};
 
 type CommandResult = "handled" | "exit" | "not-command";
 
 async function confirmAction(message: string) {
-  console.log("\nAccion supervisada:");
-  console.log(message);
+  console.log(`\n${message}`);
   const answer = await rl.question("Permitir? [y/n]: ");
   return answer.toLowerCase().trim() === "y";
-}
-
-function printHelp(langfuseEnabled: boolean) {
-  console.log("Coding Agent Multiagente iniciado.");
-  console.log(`Langfuse: ${langfuseEnabled ? "activado" : "desactivado"}`);
-  console.log("Subagentes: Explorer -> Researcher -> Implementer -> Tester -> Reviewer");
-  console.log("Comandos: /plan on, /plan off, /supervision on, /supervision off, /exit");
 }
 
 function handleCommand(userInput: string): CommandResult {
@@ -30,10 +30,12 @@ function handleCommand(userInput: string): CommandResult {
       return "exit";
     case "/plan on":
       state.mode = "planning";
+      state.lastPlan = undefined;
       console.log("Plan mode activado.");
       return "handled";
     case "/plan off":
       state.mode = "normal";
+      state.lastPlan = undefined;
       console.log("Plan mode desactivado.");
       return "handled";
     case "/supervision on":
@@ -50,8 +52,7 @@ function handleCommand(userInput: string): CommandResult {
 }
 
 async function main() {
-  const langfuse = startLangfuse();
-  printHelp(langfuse.enabled);
+  startLangfuse();
 
   try {
     while (true) {
@@ -60,14 +61,27 @@ async function main() {
       if (commandResult === "exit") break;
       if (commandResult === "handled") continue;
 
+      const intent = await resolveUserIntent(userInput, state.mode, state.lastPlan);
+      const executeLastPlan =
+        state.mode === "planning" && intent.action === "implement";
+
+      const turnMode: AgentMode = executeLastPlan ? "normal" : state.mode;
       const result = await runAgentTurn(userInput, conversation, {
-        mode: state.mode,
+        mode: turnMode,
         supervisionMode: state.supervisionMode,
-        confirmAction
+        confirmAction,
+        planContext: state.lastPlan,
+        intent
       });
-      console.log("\nAgente:");
-      console.log(result.finalText);
-      console.log(`\nSubagentes ejecutados: ${result.iterations}`);
+
+      if (turnMode === "planning") {
+        state.lastPlan = result.finalText;
+      } else if (executeLastPlan) {
+        state.mode = "normal";
+        state.lastPlan = undefined;
+      }
+
+      console.log(`\n${result.finalText}`);
     }
   } finally {
     rl.close();

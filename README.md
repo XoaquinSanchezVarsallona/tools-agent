@@ -22,7 +22,7 @@ LANGFUSE_SECRET_KEY=sk-lf-...
 LANGFUSE_BASE_URL=https://cloud.langfuse.com
 ```
 
-`OPENAI_MODEL` es opcional. Langfuse tambien es opcional para desarrollo local; si faltan sus credenciales, el CLI informa que las trazas estan desactivadas.
+`OPENAI_MODEL` es opcional. Langfuse tambien es opcional para desarrollo local; si faltan sus credenciales, el agente corre sin enviar trazas.
 
 ## Ejecucion
 
@@ -48,6 +48,8 @@ Comandos del CLI:
 | `/supervision on` | Solicita confirmacion para tools modificadoras. |
 | `/supervision off` | Usa solamente las aprobaciones obligatorias de la configuracion. |
 | `/exit` | Cierra el CLI y envia las trazas pendientes. |
+
+La consola muestra solamente la respuesta final y las confirmaciones de seguridad necesarias. El detalle de la ultima ejecucion se guarda en `.agent/last-run.json`.
 
 ## Arquitectura
 
@@ -81,7 +83,7 @@ npm run rag:ingest
 
 Researcher usa `rag_search` antes de `web_search`. El RAG se considera suficiente cuando recupera al menos dos chunks y el mejor score es igual o mayor a `0.35`.
 
-El resumen final diferencia fuentes del repositorio, memoria, RAG y web, e imprime las URLs recuperadas.
+El registro `.agent/last-run.json` diferencia fuentes del repositorio, memoria, RAG y web, e incluye las URLs recuperadas.
 
 ## Seguridad
 
@@ -114,7 +116,7 @@ Tareas sugeridas para las dos evidencias de la entrega:
 1. `Genera un boton de confirmacion para una aplicacion financiera siguiendo Material Design.` Debe mostrar chunks del RAG, archivos generados y build exitoso.
 2. Repetir una mejora sobre ese componente en otra sesion. Debe mostrar la memoria previa; alternativamente, hacer un pedido sin evidencia suficiente para demostrar web fallback o detencion explicada.
 
-En cada evidencia guardar el pedido, output final, fuentes, archivos creados, comandos ejecutados y una explicacion breve de lo observado.
+Para cada evidencia usar `.agent/last-run.json`, que contiene el pedido, intencion detectada, resultados de subagentes, fuentes, archivos, comandos y errores.
 
 ## Storybook
 
