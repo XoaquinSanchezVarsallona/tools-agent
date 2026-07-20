@@ -1,95 +1,115 @@
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { AgentMode, runAgentTurn } from "./agent/harness";
+import { type AgentMode, runAgentTurn } from "./agent/harness";
+import { type OperatingStyle, runOrchestratedTurn } from "./agent/orchestrator";
+import { loadAgentConfig } from "./policies/config";
+import type { ResponseInputItem } from "openai/resources/responses/responses";
+import { getTelemetry } from "./observability/telemetry";
 
 const rl = readline.createInterface({ input, output });
-
-const conversation: any[] = [];
+const normalConversation: ResponseInputItem[] = [];
+const orchestratorConversation: ResponseInputItem[] = [];
+const config = loadAgentConfig(process.env.AGENT_CONFIG_PATH ?? "./agent.config.json");
+const telemetry = getTelemetry(config.langfuse.enabled);
+const WORKSPACE = process.env.AGENT_WORKSPACE ?? "./fixture-user-api";
 
 type CommandResult = "handled" | "exit" | "not-command";
-
 const state = {
     mode: "normal" as AgentMode,
+    operatingStyle: "normal" as OperatingStyle,
     supervisionMode: true
 };
 
 async function confirmAction(message: string): Promise<boolean> {
     console.log("\nAcción supervisada:");
     console.log(message);
-
-    const answer = await rl.question("¿Permitir? [y/n]: ");
-    return answer.toLowerCase().trim() === "y";
+    return (await rl.question("¿Permitir? [y/n]: ")).toLowerCase().trim() === "y";
 }
 
 function printHelp() {
     console.log("Coding Agent iniciado.");
-    console.log("Comandos:");
-    console.log("/plan on");
-    console.log("/plan off");
-    console.log("/supervision on");
-    console.log("/supervision off");
-    console.log("/exit");
+    console.log(`Workspace: ${WORKSPACE}`);
+    console.log(
+        "Comandos:\n/orchestrator on\n/orchestrator off\n/plan on\n/plan off\n/supervision on\n/supervision off\n/exit"
+    );
 }
 
 function handleCommand(userInput: string): CommandResult {
     switch (userInput.trim()) {
-        case "/exit":
-            return "exit";
-
+        case "/exit": return "exit";
+        case "/orchestrator on":
+            state.operatingStyle = "orchestrator";
+            console.log("Modo Orchestrator activado.");
+            return "handled";
+        case "/orchestrator off":
+            state.operatingStyle = "normal";
+            console.log("Modo Orchestrator desactivado; modo normal activo.");
+            return "handled";
         case "/plan on":
+            if (state.operatingStyle === "orchestrator") {
+                console.log("Plan mode solo está disponible en modo normal. Usá /orchestrator off primero.");
+                return "handled";
+            }
             state.mode = "planning";
             console.log("Plan mode activado.");
             return "handled";
-
         case "/plan off":
+            if (state.operatingStyle === "orchestrator") {
+                console.log("Plan mode solo está disponible en modo normal. Usá /orchestrator off primero.");
+                return "handled";
+            }
             state.mode = "normal";
             console.log("Plan mode desactivado.");
             return "handled";
-
-        case "/supervision on":
-            state.supervisionMode = true;
-            console.log("Supervisión activada.");
-            return "handled";
-
-        case "/supervision off":
-            state.supervisionMode = false;
-            console.log("Supervisión desactivada.");
-            return "handled";
-
-        default:
-            return "not-command";
+        case "/supervision on": state.supervisionMode = true; console.log("Supervisión activada."); return "handled";
+        case "/supervision off": state.supervisionMode = false; console.log("Supervisión desactivada."); return "handled";
+        default: return "not-command";
     }
 }
 
 async function runTurn(userInput: string) {
-    return runAgentTurn(userInput, conversation, {
+    if (state.operatingStyle === "orchestrator") {
+        return runOrchestratedTurn(userInput, orchestratorConversation, {
+            config,
+            workspace: WORKSPACE,
+            supervisionMode: state.supervisionMode,
+            confirmAction,
+            telemetry,
+            onProgress: (stage, message) => console.log(`[${stage}] ${message}`)
+        });
+    }
+
+    return runAgentTurn(userInput, normalConversation, {
         mode: state.mode,
+        config,
         supervisionMode: state.supervisionMode,
-        confirmAction
+        confirmAction,
+        telemetry
     });
 }
 
 async function main() {
-    printHelp();
-
-    while (true) {
-        const userInput = await rl.question("\nUsuario: ");
-        const commandResult = handleCommand(userInput);
-
-        if (commandResult === "exit") break;
-        if (commandResult === "handled") continue;
-
-        const result = await runTurn(userInput);
-
-        console.log("\nAgente:");
-        console.log(result.finalText);
-        console.log(`\nIteraciones del loop interno: ${result.iterations}`);
+    try {
+        printHelp();
+        while (true) {
+            const userInput = await rl.question("\nUsuario: ");
+            const commandResult = handleCommand(userInput);
+            if (commandResult === "exit") break;
+            if (commandResult === "handled") continue;
+            const result = await runTurn(userInput);
+            console.log("\nAgente:");
+            console.log(result.finalText);
+            if ("iterations" in result) {
+                console.log(`\nIteraciones del loop interno: ${result.iterations}`);
+            }
+        }
+    } finally {
+        rl.close();
+        await telemetry.flush();
     }
-
-    rl.close();
 }
 
 main().catch((error) => {
     console.error("Error fatal:", error);
-    process.exit(1);
+    process.exitCode = 1;
 });

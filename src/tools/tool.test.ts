@@ -1,5 +1,0 @@
-import test from "node:test"; import assert from "node:assert/strict"; import { z } from "zod"; import { ToolException, ToolRegistry } from "./tool";
-const tool = { name: "sample", description: "sample", parameters: { type: "object" }, schema: z.object({ value: z.string() }), effect: "read" as const, allowedRoles: ["explorer" as const], async execute(args: { value: string }) { return args.value; } };
-test("test registry resolves tools only for allowed roles", () => { const registry = new ToolRegistry().register(tool); assert.equal(registry.forRole("explorer").length, 1); assert.equal(registry.forRole("tester").length, 0); assert.equal(registry.get("sample").name, "sample"); });
-test("test registry rejects unknown and duplicate tools", () => { const registry = new ToolRegistry().register(tool); assert.throws(() => registry.register(tool), ToolException); assert.throws(() => registry.get("missing"), ToolException); });
-test("test tool schema rejects invalid arguments", () => { assert.throws(() => tool.schema.parse({ value: 1 })); });

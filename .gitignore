@@ -4,3 +4,9 @@ package-lock.json
 dist
 .agent-data
 dist
+.idea/
+dist
+.agent-data
+dist
+.idea
+data/

@@ -1,7 +1,8 @@
 import type { FunctionTool } from "openai/resources/responses/responses";
 import type { ToolName } from "./tools/index";
+import { getDiscoveredPlugins } from "./tools/index";
 
-const toolDefinitionsByName: Record<ToolName, FunctionTool> = {
+const toolDefinitionsByName: Record<string, FunctionTool> = {
   read_file: {
     type: "function" as const,
     name: "read_file",
@@ -73,9 +74,45 @@ const toolDefinitionsByName: Record<ToolName, FunctionTool> = {
       required: ["command"],
       additionalProperties: false
     }
+  },
+  web_search: {
+    type: "function" as const,
+    name: "web_search",
+    description:
+        "Busca en la web información técnica cuando la documentación local (RAG) no es suficiente. Priorizar fuentes oficiales.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Consulta de búsqueda." },
+        maxResults: { type: "number", description: "Cantidad máxima de resultados (default 5)." }
+      },
+      required: ["query", "maxResults"],
+      additionalProperties: false
+    }
   }
 };
 
-export function getToolDefinitions(toolNames: readonly ToolName[]) {
-  return toolNames.map((toolName) => toolDefinitionsByName[toolName]);
+export function getToolDefinitions(toolNames: readonly ToolName[]): FunctionTool[] {
+  const plugins = getDiscoveredPlugins();
+
+  return toolNames.map((toolName): FunctionTool => {
+    const builtIn = toolDefinitionsByName[toolName];
+    if (builtIn) return builtIn;
+
+    const plugin = plugins.get(toolName);
+    if (plugin) {
+      return {
+        type: "function" as const,
+        name: plugin.name,
+        description: plugin.description,
+        strict: true,
+        parameters: plugin.parameters
+      } as FunctionTool;
+    }
+
+    throw new Error(
+        `No se encontró definición para la tool "${toolName}" (ni built-in ni plugin descubierto).`
+    );
+  });
 }

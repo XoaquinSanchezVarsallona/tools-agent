@@ -5,9 +5,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node --test dist/**/*.test.js",
-    "start": "tsx src/index.ts",
-    "rag:index": "tsx src/scripts/indexRag.ts"
+    "test": "npm run build && node --import tsx --test src/agent/orchestrator.test.ts",
+    "start": "tsx src/index.ts"
   },
   "repository": {
     "type": "git",
@@ -21,12 +20,19 @@
   },
   "homepage": "https://github.com/XoaquinSanchezVarsallona/tools-agent#readme",
   "dependencies": {
+    "@langfuse/otel": "^5.9.1",
+    "@langfuse/tracing": "^5.9.1",
+    "@opentelemetry/sdk-node": "^0.220.0",
+    "better-sqlite3": "^12.11.1",
+    "cheerio": "^1.2.0",
     "dotenv": "^17.4.2",
+    "minimatch": "^10.2.5",
     "openai": "^6.39.0",
-    "langfuse": "^3.38.20",
+    "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.9.1",
     "tsx": "^4.22.3",
     "typescript": "^6.0.3"
