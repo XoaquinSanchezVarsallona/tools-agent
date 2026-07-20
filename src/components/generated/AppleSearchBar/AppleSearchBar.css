@@ -1,0 +1,200 @@
+.AppleSearchBar {
+  width: 720px;
+  max-width: calc(100vw - 40px);
+
+  border-radius: 22px;
+  padding: 14px;
+
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 20px 50px rgba(15, 23, 42, 0.10),
+    0 1px 0 rgba(255, 255, 255, 0.65) inset;
+
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+
+  color: rgba(0, 0, 0, 0.92);
+  font-family: ui-sans-serif, system-ui, -apple-system, "SF Pro Text", "Segoe UI",
+    Roboto, Helvetica, Arial;
+}
+
+.AppleSearchBar__row {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+}
+
+.AppleSearchBar__field {
+  flex: 1;
+  min-width: 220px;
+}
+
+.AppleSearchBar__label {
+  display: inline-block;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.70);
+  margin-bottom: 8px;
+}
+
+.AppleSearchBar__inputWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+
+  border-radius: 999px;
+  padding: 10px 12px;
+
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
+
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.AppleSearchBar__inputWrap:focus-within {
+  border-color: rgba(0, 122, 255, 0.55);
+  box-shadow:
+    0 0 0 4px rgba(0, 122, 255, 0.18),
+    0 1px 0 rgba(255, 255, 255, 0.7) inset;
+}
+
+.AppleSearchBar__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+  color: rgba(0, 0, 0, 0.42);
+}
+
+.AppleSearchBar__input {
+  width: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.90);
+  padding-right: 26px;
+}
+
+.AppleSearchBar__input::placeholder {
+  color: rgba(0, 0, 0, 0.40);
+}
+
+.AppleSearchBar__clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+
+  border: 0;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 0.62);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+.AppleSearchBar__clear:active:not(:disabled) {
+  transform: translateY(-50%) scale(0.98);
+}
+
+.AppleSearchBar__clear:focus-visible {
+  outline: 3px solid rgba(0, 122, 255, 0.45);
+  outline-offset: 2px;
+}
+
+.AppleSearchBar__searchBtn {
+  border: 0;
+  cursor: pointer;
+
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+
+  background: linear-gradient(
+    180deg,
+    rgba(0, 122, 255, 0.98),
+    rgba(0, 98, 224, 0.98)
+  );
+  color: white;
+  font-weight: 700;
+  font-size: 13px;
+
+  box-shadow:
+    0 10px 24px rgba(0, 122, 255, 0.22),
+    0 1px 0 rgba(255, 255, 255, 0.35) inset;
+
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+.AppleSearchBar__searchBtn:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.AppleSearchBar__searchBtn:focus-visible {
+  outline: 3px solid rgba(0, 122, 255, 0.45);
+  outline-offset: 2px;
+}
+
+.AppleSearchBar__filters {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.AppleSearchBar__chip {
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  background: rgba(255, 255, 255, 0.55);
+  color: rgba(0, 0, 0, 0.78);
+
+  border-radius: 999px;
+  padding: 8px 10px;
+
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
+
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.AppleSearchBar__chip:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.70);
+}
+
+.AppleSearchBar__chip:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.AppleSearchBar__chip:focus-visible {
+  outline: 3px solid rgba(0, 122, 255, 0.45);
+  outline-offset: 2px;
+}
+
+.AppleSearchBar__chip.is-selected {
+  background: rgba(0, 122, 255, 0.12);
+  border-color: rgba(0, 122, 255, 0.22);
+  color: rgba(0, 60, 150, 0.95);
+}
+
+.AppleSearchBar.is-disabled {
+  opacity: 0.65;
+}
+
+.AppleSearchBar.is-disabled .AppleSearchBar__chip,
+.AppleSearchBar.is-disabled .AppleSearchBar__clear,
+.AppleSearchBar.is-disabled .AppleSearchBar__searchBtn {
+  cursor: not-allowed;
+}

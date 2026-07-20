@@ -3,7 +3,7 @@ import React from "react";
 import { FrivNavbar } from "./FrivNavbar";
 
 const meta: Meta<typeof FrivNavbar> = {
-  title: "generated/FrivNavbar",
+  title: "Generated/FrivNavbar",
   component: FrivNavbar,
   parameters: {
     layout: "fullscreen",

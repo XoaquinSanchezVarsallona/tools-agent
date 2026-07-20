@@ -68,7 +68,7 @@ export async function handleAgentRequest(req: IncomingMessage, res: ServerRespon
       .find((f) => f.endsWith(".tsx") && f.includes("generated"))
       ?.match(/generated\/([^/]+)\//)?.[1];
 
-    const storyboookUrl = componentName ? `http://localhost:6006/?path=/docs/generated-${componentName}--docs` : null;
+    const storyboookUrl = componentName ? `http://localhost:6006/?path=/docs/generated-${componentName.toLowerCase()}` : null;
 
     respondJson(res, 200, {
       reply: result.finalText,

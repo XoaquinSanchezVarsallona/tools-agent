@@ -1,0 +1,148 @@
+.AppleInputCard {
+  width: 420px;
+  max-width: calc(100vw - 40px);
+
+  border-radius: 22px;
+  padding: 18px;
+
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 20px 50px rgba(15, 23, 42, 0.10),
+    0 1px 0 rgba(255, 255, 255, 0.65) inset;
+
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+
+  color: rgba(0, 0, 0, 0.92);
+  font-family: ui-sans-serif, system-ui, -apple-system, "SF Pro Text", "Segoe UI",
+    Roboto, Helvetica, Arial;
+}
+
+.AppleInputCard__header {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.AppleInputCard__title {
+  font-size: 16px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin: 0;
+  font-weight: 650;
+}
+
+.AppleInputCard__description {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: rgba(0, 0, 0, 0.62);
+}
+
+.AppleInputCard__form {
+  display: grid;
+  gap: 14px;
+}
+
+.AppleInputCard__label {
+  display: inline-block;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.70);
+  margin-bottom: 8px;
+}
+
+.AppleInputCard__inputWrap {
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.AppleInputCard__input {
+  width: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.90);
+}
+
+.AppleInputCard__input::placeholder {
+  color: rgba(0, 0, 0, 0.40);
+}
+
+.AppleInputCard__inputWrap:focus-within {
+  border-color: rgba(0, 122, 255, 0.55);
+  box-shadow:
+    0 0 0 4px rgba(0, 122, 255, 0.18),
+    0 1px 0 rgba(255, 255, 255, 0.7) inset;
+}
+
+.AppleInputCard__message {
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.56);
+}
+
+.AppleInputCard__message--error {
+  color: rgba(220, 38, 38, 0.90);
+}
+
+.AppleInputCard__footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.AppleInputCard__cta {
+  border: 0;
+  cursor: pointer;
+
+  border-radius: 999px;
+  padding: 10px 14px;
+
+  background: linear-gradient(
+    180deg,
+    rgba(0, 122, 255, 0.98),
+    rgba(0, 98, 224, 0.98)
+  );
+  color: white;
+  font-weight: 700;
+  font-size: 13px;
+
+  box-shadow:
+    0 10px 24px rgba(0, 122, 255, 0.26),
+    0 1px 0 rgba(255, 255, 255, 0.35) inset;
+
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+.AppleInputCard__cta:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.AppleInputCard__cta:focus-visible {
+  outline: 3px solid rgba(0, 122, 255, 0.45);
+  outline-offset: 2px;
+}
+
+.AppleInputCard.is-invalid .AppleInputCard__inputWrap {
+  border-color: rgba(220, 38, 38, 0.40);
+}
+
+.AppleInputCard.is-invalid .AppleInputCard__inputWrap:focus-within {
+  box-shadow:
+    0 0 0 4px rgba(220, 38, 38, 0.12),
+    0 1px 0 rgba(255, 255, 255, 0.7) inset;
+}
+
+.AppleInputCard.is-disabled {
+  opacity: 0.65;
+}
+
+.AppleInputCard.is-disabled .AppleInputCard__cta {
+  cursor: not-allowed;
+  box-shadow: none;
+}

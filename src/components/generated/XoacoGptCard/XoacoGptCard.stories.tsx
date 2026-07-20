@@ -3,7 +3,7 @@ import React from "react";
 import { XoacoGptCard, type XoacoGptCardProps } from "./XoacoGptCard";
 
 const meta: Meta<typeof XoacoGptCard> = {
-  title: "generated/XoacoGptCard",
+  title: "Generated/XoacoGptCard",
   component: XoacoGptCard,
   parameters: {
     layout: "centered",
