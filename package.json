@@ -4,11 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "agent": "tsx src/componentAgent/run.ts",
+    "agent": "tsx src/index.ts",
     "rag:ingest": "tsx src/rag/ingest.ts",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "start": "tsx src/index.ts"
   },
   "repository": {
     "type": "git",

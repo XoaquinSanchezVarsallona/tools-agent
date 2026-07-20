@@ -1,0 +1,11 @@
+{
+  "workspace": ".",
+  "permissions": {
+    "readDeny": [".env", "secrets/**", "**/*.pem"],
+    "writeDeny": [".env", ".github/**", "secrets/**", "package-lock.json"]
+  },
+  "commands": {
+    "deny": ["rm -rf", "git push"],
+    "requireApproval": ["npm install", "npm i", "git commit"]
+  }
+}

@@ -192,7 +192,7 @@ export function RetroGameCard({
                   aria-hidden="true"
                 />
               ))}
-              <span className="rgc__ratingText">{safeRating.toFixed(1)}</span>
+              <span className="rgc__ratingText">{safeRating?.toFixed(1)}</span>
             </div>
           ) : null}
         </div>

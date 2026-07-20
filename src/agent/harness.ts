@@ -2,47 +2,20 @@ import type {
   ResponseFunctionToolCall,
   ResponseInputItem
 } from "openai/resources/responses/responses";
-import { llm } from "../llm/client";
+import { setActiveTraceIO, startActiveObservation } from "@langfuse/tracing";
+import { loadAgentConfig, checkPolicy, type AgentConfig } from "./config";
+import { readProjectMemory, rememberTask } from "./memory";
+import {
+  createTaskState,
+  summarizeState,
+  type SubagentName,
+  type TaskState
+} from "./state";
+import { getLlm, MODEL } from "../llm/client";
 import { getToolDefinitions } from "../toolsDefinition";
-import { toolRegistry, ToolName } from "../tools/index";
-
-const AGENT_INSTRUCTIONS = `
-Sos un coding agent.
-Tu objetivo es resolver tareas de programación usando tools.
-No inventes contenido de archivos: usá read_file.
-Antes de modificar código, entendé el proyecto.
-Después de modificar código, intentá verificar con tests o comandos relevantes.
-Cuando termines, explicá brevemente qué hiciste.
-`.trim();
-
-const PLANNING_INSTRUCTIONS = `
-${AGENT_INSTRUCTIONS}
-
-Estás en modo planificación.
-Usá las tools de lectura disponibles para entender el proyecto cuando sea necesario.
-No implementes cambios. Terminá con un plan numerado y concreto para resolver la tarea.
-`.trim();
+import { toolRegistry, type ToolName } from "../tools";
 
 export type AgentMode = "normal" | "planning";
-
-const MODE_CONFIG: Record<
-  AgentMode,
-  { instructions: string; toolNames: readonly ToolName[] }
-> = {
-  normal: {
-    instructions: AGENT_INSTRUCTIONS,
-    toolNames: ["read_file", "list_files", "write_file", "run_command"]
-  },
-  planning: {
-    instructions: PLANNING_INSTRUCTIONS,
-    toolNames: ["read_file", "list_files"]
-  }
-};
-
-const SYSTEM_MODIFYING_TOOLS = new Set<ToolName>([
-  "write_file",
-  "run_command"
-]);
 
 type AgentOptions = {
   mode: AgentMode;
@@ -50,182 +23,287 @@ type AgentOptions = {
   confirmAction?: (message: string) => Promise<boolean>;
 };
 
+type SubagentDefinition = {
+  name: SubagentName;
+  instructions: string;
+  tools: readonly ToolName[];
+};
+
+const SUBAGENTS: Record<SubagentName, SubagentDefinition> = {
+  explorer: {
+    name: "explorer",
+    tools: ["list_files", "read_file", "memory_read"],
+    instructions: `Sos Explorer. Entende la estructura, dependencias, convenciones y archivos relevantes para el pedido. Usa las tools, no inventes contenido. Termina con un resumen breve de hallazgos.`
+  },
+  researcher: {
+    name: "researcher",
+    tools: ["rag_search", "web_search", "memory_read"],
+    instructions: `Sos Researcher. Consulta obligatoriamente rag_search antes de decidir. Usa web_search solo si el resultado RAG dice sufficient=false. Distingue fuentes RAG, web y memoria. Termina listando evidencia y URLs.`
+  },
+  implementer: {
+    name: "implementer",
+    tools: ["read_file", "list_files", "write_file"],
+    instructions: `Sos Implementer. Crea un componente React TypeScript aislado que satisfaga el pedido y use la evidencia disponible. Infiere un nombre PascalCase y escribe exactamente tres archivos bajo src/components/generated/{Nombre}/: {Nombre}.tsx, {Nombre}.css y {Nombre}.stories.tsx. No agregues dependencias. La story debe tener al menos tres variantes. Usa write_file y termina resumiendo los cambios.`
+  },
+  tester: {
+    name: "tester",
+    tools: ["run_command"],
+    instructions: `Sos Tester. Valida el resultado ejecutando exactamente npm run typecheck y npm run build-storybook. No escribas tests ni modifiques archivos. Informa STATUS: PASS solo si ambos comandos terminan con exitCode 0; de lo contrario informa STATUS: FAIL y los errores concretos.`
+  },
+  reviewer: {
+    name: "reviewer",
+    tools: ["read_file"],
+    instructions: `Sos Reviewer. Revisa que los archivos modificados respondan al pedido, usen la evidencia y que las validaciones hayan pasado. Lee los archivos relevantes. Termina con STATUS: PASS o STATUS: NEEDS_CHANGES y una explicacion breve.`
+  }
+};
+
 export async function runAgentTurn(
   userMessage: string,
   conversation: ResponseInputItem[],
   options: AgentOptions
 ) {
-  const modeConfig = MODE_CONFIG[options.mode];
-  addUserMessage(conversation, userMessage);
-  let iterations = 0;
+  const config = await loadAgentConfig();
+  const state = createTaskState(userMessage);
+  const memory = await readProjectMemory();
+  state.sources.push({ kind: "memory", label: "Project memory" });
+  const repeatedCalls = new Map<string, number>();
 
-  while (true) {
-    iterations++;
+  const finalText = await startActiveObservation(
+    "coding-agent-task",
+    async (task) => {
+      task.update({ input: { request: userMessage }, metadata: { model: MODEL } } as any);
+      setActiveTraceIO({ input: { request: userMessage } });
 
-    const response = await createAgentResponse(conversation, modeConfig);
-    appendResponseOutput(conversation, response.output);
+      await runStage("explorer");
+      await runStage("researcher");
 
-    const toolCalls = findToolCalls(response.output);
+      if (options.mode === "planning") {
+        const plan = await runStage("reviewer", "Estas en modo planificacion. No revises cambios: propone un plan numerado usando los hallazgos.");
+        state.stage = "done";
+        const result = formatFinal(plan);
+        task.update({ output: result } as any);
+        setActiveTraceIO({ output: result });
+        return result;
+      }
 
-    if (toolCalls.length === 0) {
-      return buildFinalResult(response.output_text, iterations);
-    }
+      await runStage("implementer");
+      const tester = await runStage("tester");
+      const reviewer = await runStage("reviewer");
 
-    for (const toolCall of toolCalls) {
-      await handleToolCall(toolCall, conversation, options, modeConfig.toolNames);
-    }
-  }
+      if (needsRepair(tester, reviewer, state)) {
+        state.repairAttempted = true;
+        await runStage("implementer", "Corregi solamente los errores informados por Tester o Reviewer. Este es el unico intento de reparacion.");
+        const retryTester = await runStage("tester");
+        const retryReviewer = await runStage("reviewer");
+        state.stage = needsRepair(retryTester, retryReviewer, state) ? "blocked" : "done";
+      } else {
+        state.stage = "done";
+      }
+
+      state.sources.push({
+        kind: "inference",
+        label: "Reviewer conclusion",
+        detail: state.progress.reviewer
+      });
+      await rememberTask(state);
+      const result = formatFinal(state.progress.reviewer ?? reviewer);
+      task.update({ output: { result, state }, metadata: { status: state.stage } } as any);
+      setActiveTraceIO({ output: { result, state } });
+      return result;
+
+      async function runStage(name: SubagentName, extra = "") {
+        state.stage = name;
+        const definition = SUBAGENTS[name];
+        const prompt = [
+          `Pedido original: ${state.originalRequest}`,
+          `Memoria del proyecto: ${JSON.stringify(memory)}`,
+          `Estado compartido: ${summarizeState(state)}`,
+          extra
+        ].filter(Boolean).join("\n\n");
+
+        const output = await startActiveObservation(
+          `subagent-${name}`,
+          async (observation) => {
+            observation.update({ input: prompt } as any);
+            const result = await runSubagent(
+              definition,
+              prompt,
+              state,
+              config,
+              options,
+              repeatedCalls
+            );
+            observation.update({ output: result } as any);
+            return result;
+          },
+          { asType: "agent" }
+        );
+        state.progress[name] = output;
+        return output;
+      }
+
+      function formatFinal(review: string) {
+        const sourceLines = state.sources
+          .filter((source, index, all) =>
+            all.findIndex((candidate) => candidate.kind === source.kind && candidate.url === source.url && candidate.label === source.label) === index
+          )
+          .map((source) => `- [${source.kind}] ${source.label}${source.url ? ` | ${source.url}` : ""}`);
+        return [
+          review,
+          `\nEstado: ${state.stage}`,
+          `Archivos modificados: ${state.modifiedFiles.join(", ") || "ninguno"}`,
+          `Comandos: ${state.commands.map((item) => `${item.command} -> ${item.exitCode}`).join(", ") || "ninguno"}`,
+          "Fuentes:",
+          sourceLines.join("\n") || "- ninguna"
+        ].join("\n");
+      }
+    },
+    { asType: "agent" }
+  );
+
+  conversation.push({ role: "user", content: userMessage });
+  conversation.push({ role: "assistant", content: finalText });
+  if (conversation.length > 12) conversation.splice(0, conversation.length - 12);
+  return { finalText, iterations: Object.keys(state.progress).length, state };
 }
 
-async function createAgentResponse(
-  conversation: ResponseInputItem[],
-  modeConfig: { instructions: string; toolNames: readonly ToolName[] }
+async function runSubagent(
+  definition: SubagentDefinition,
+  prompt: string,
+  state: TaskState,
+  config: AgentConfig,
+  options: AgentOptions,
+  repeatedCalls: Map<string, number>
 ) {
-  return llm.responses.create({
-    model: "gpt-5.2",
-    instructions: modeConfig.instructions,
-    input: conversation,
-    tools: getToolDefinitions(modeConfig.toolNames)
-  });
+  const input: ResponseInputItem[] = [{ role: "user", content: prompt }];
+
+  for (let iteration = 0; iteration < 8; iteration++) {
+    const response = await getLlm().responses.create({
+      model: MODEL,
+      instructions: definition.instructions,
+      input,
+      tools: getToolDefinitions(definition.tools)
+    });
+    input.push(...(response.output as ResponseInputItem[]));
+    const calls = response.output.filter(
+      (item): item is ResponseFunctionToolCall => item.type === "function_call"
+    );
+    if (calls.length === 0) return response.output_text;
+
+    for (const call of calls) {
+      const output = await handleToolCall(
+        call,
+        definition.tools,
+        state,
+        config,
+        options,
+        repeatedCalls
+      );
+      input.push({
+        type: "function_call_output",
+        call_id: call.call_id,
+        output: JSON.stringify(output)
+      });
+    }
+  }
+
+  state.errors.push(`${definition.name} excedio el limite de iteraciones`);
+  return `STATUS: FAIL\n${definition.name} excedio el limite de iteraciones.`;
 }
 
 async function handleToolCall(
-  toolCall: ResponseFunctionToolCall,
-  conversation: ResponseInputItem[],
+  call: ResponseFunctionToolCall,
+  allowedTools: readonly ToolName[],
+  state: TaskState,
+  config: AgentConfig,
   options: AgentOptions,
-  allowedToolNames: readonly ToolName[]
+  repeatedCalls: Map<string, number>
 ) {
-  const parsedCall = parseToolCall(toolCall, allowedToolNames);
-
-  if (!parsedCall.ok) {
-    appendToolOutput(conversation, toolCall.call_id, parsedCall.output);
-    return;
+  if (!(call.name in toolRegistry) || !allowedTools.includes(call.name as ToolName)) {
+    return { error: `Tool no permitida: ${call.name}` };
   }
 
-  const approved = await requestApproval(parsedCall.name, parsedCall.args, options);
-
-  if (!approved) {
-    appendToolOutput(conversation, toolCall.call_id, rejectedToolOutput());
-    return;
+  let args: any;
+  try {
+    args = JSON.parse(call.arguments || "{}");
+  } catch {
+    return { error: "Argumentos JSON invalidos" };
   }
 
-  const output = await executeTool(parsedCall.name, parsedCall.args);
-  appendToolOutput(conversation, toolCall.call_id, output);
-}
-
-function parseToolCall(
-  toolCall: ResponseFunctionToolCall,
-  allowedToolNames: readonly ToolName[]
-) {
-  const toolName = toolCall.name;
-
-  if (!isToolName(toolName)) {
-    return {
-      ok: false as const,
-      output: { error: `Tool desconocida: ${toolName}` }
-    };
+  const toolName = call.name as ToolName;
+  const fingerprint = `${state.stage}:${state.repairAttempted}:${toolName}:${JSON.stringify(args)}`;
+  const repetitions = (repeatedCalls.get(fingerprint) ?? 0) + 1;
+  repeatedCalls.set(fingerprint, repetitions);
+  if (repetitions >= 2) {
+    const message = `Loop detenido: ${toolName} repitio la misma llamada sin avanzar.`;
+    state.observations.push(message);
+    return { error: message };
   }
 
-  if (!allowedToolNames.includes(toolName)) {
-    return {
-      ok: false as const,
-      output: { error: `Tool no disponible en el modo actual: ${toolName}` }
-    };
+  const policy = checkPolicy(config, toolName, args);
+  if (!policy.allowed) {
+    state.errors.push(policy.reason ?? "Tool denied by policy");
+    return { error: policy.reason };
+  }
+
+  const modifying = toolName === "write_file" || toolName === "run_command" || toolName === "memory_write";
+  if (policy.requiresApproval || (options.supervisionMode && modifying)) {
+    const approved = await options.confirmAction?.(
+      `El agente quiere ejecutar ${toolName} con args: ${JSON.stringify(args, null, 2)}`
+    );
+    if (!approved) return { rejected: true, message: "El usuario rechazo la accion." };
   }
 
   try {
-    return {
-      ok: true as const,
-      name: toolName,
-      args: JSON.parse(toolCall.arguments || "{}") as unknown
-    };
+    const output = await startActiveObservation(
+      `tool-${toolName}`,
+      async (observation) => {
+        observation.update({ input: args } as any);
+        const result = await toolRegistry[toolName](args as never);
+        observation.update({ output: result } as any);
+        return result;
+      },
+      { asType: "tool" }
+    );
+    recordToolResult(toolName, args, output, state);
+    return output;
   } catch (error: unknown) {
-    return {
-      ok: false as const,
-      output: { error: `Argumentos inválidos: ${formatError(error)}` }
-    };
+    const message = error instanceof Error ? error.message : String(error);
+    state.errors.push(`${toolName}: ${message}`);
+    return { error: message };
   }
 }
 
-async function executeTool(toolName: ToolName, args: unknown) {
-  try {
-    return await toolRegistry[toolName](args as never);
-  } catch (error: unknown) {
-    return { error: formatError(error) };
+function recordToolResult(toolName: ToolName, args: any, output: any, state: TaskState) {
+  if (toolName === "read_file" || toolName === "list_files") {
+    state.sources.push({ kind: "repository", label: String(args.path) });
+  }
+  if (toolName === "memory_read") {
+    state.sources.push({ kind: "memory", label: "Project memory" });
+  }
+  if (toolName === "rag_search") {
+    for (const chunk of output.chunks ?? []) {
+      state.sources.push({ kind: "rag", label: `${chunk.source}: ${chunk.section}`, url: chunk.url, detail: `score ${chunk.score}` });
+    }
+  }
+  if (toolName === "web_search") {
+    for (const source of output.sources ?? []) {
+      state.sources.push({ kind: "web", label: source.title, url: source.url });
+    }
+  }
+  if (toolName === "write_file") {
+    state.modifiedFiles.push(String(args.path));
+  }
+  if (toolName === "run_command") {
+    state.commands.push({ command: String(args.command), exitCode: Number(output.exitCode ?? 1) });
   }
 }
 
-async function requestApproval(
-  toolName: ToolName,
-  args: unknown,
-  options: AgentOptions
-) {
-  if (!shouldRequestApproval(toolName, options)) {
-    return true;
-  }
-
-  const message = `El agente quiere ejecutar ${toolName} con args: ${JSON.stringify(
-    args,
-    null,
-    2
-  )}`;
-
-  return Boolean(await options.confirmAction?.(message));
-}
-
-function shouldRequestApproval(toolName: ToolName, options: AgentOptions) {
-  return options.supervisionMode && SYSTEM_MODIFYING_TOOLS.has(toolName);
-}
-
-function isToolName(name: string): name is ToolName {
-  return name in toolRegistry;
-}
-
-function findToolCalls(output: unknown[]) {
-  return output.filter(
-    (item): item is ResponseFunctionToolCall =>
-      isResponseItem(item) && item.type === "function_call"
+function needsRepair(tester: string, reviewer: string, state: TaskState) {
+  const latestCommands = state.commands.slice(-2);
+  return (
+    tester.includes("STATUS: FAIL") ||
+    reviewer.includes("STATUS: NEEDS_CHANGES") ||
+    latestCommands.some((command) => command.exitCode !== 0)
   );
-}
-
-function appendResponseOutput(conversation: ResponseInputItem[], output: unknown[]) {
-  conversation.push(...(output as ResponseInputItem[]));
-}
-
-function appendToolOutput(
-  conversation: ResponseInputItem[],
-  callId: string,
-  output: unknown
-) {
-  conversation.push({
-    type: "function_call_output",
-    call_id: callId,
-    output: JSON.stringify(output)
-  });
-}
-
-function addUserMessage(conversation: ResponseInputItem[], userMessage: string) {
-  conversation.push({
-    role: "user",
-    content: userMessage
-  });
-}
-
-function buildFinalResult(finalText: string, iterations: number) {
-  return { finalText, iterations };
-}
-
-function rejectedToolOutput() {
-  return {
-    rejected: true,
-    message: "El usuario rechazó esta acción."
-  };
-}
-
-function formatError(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function isResponseItem(item: unknown): item is { type: string } {
-  return typeof item === "object" && item !== null && "type" in item;
 }

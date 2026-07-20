@@ -1,100 +1,130 @@
-# tools-agent
+# Coding Agent Multiagente
 
-CLI experimental de coding agent y primera version de un agente especializado en generar componentes React con RAG local, Storybook y Langfuse.
+Trabajo final de Inteligencia Artificial. Evoluciona el coding agent construido en clase para generar componentes React aislados con Storybook, RAG local, memoria de proyecto, politicas de seguridad, subagentes y observabilidad.
 
-## Requisitos
-
-- Node.js 20 o superior
-- npm
-- Una API key de OpenAI
-- Credenciales de Langfuse si se quiere enviar trazas
+No usa frameworks de orquestacion. El agente principal y los subagentes estan implementados sobre el harness original y la Responses API.
 
 ## Instalacion
+
+Requiere Node.js 20 o superior.
 
 ```bash
 npm install
 ```
 
-Crea un archivo `.env` en la raiz del proyecto:
+Variables de entorno en `.env`:
 
 ```bash
 OPENAI_API_KEY=tu_api_key
+OPENAI_MODEL=gpt-5.2
 LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 LANGFUSE_BASE_URL=https://cloud.langfuse.com
 ```
 
-`LANGFUSE_PUBLIC_KEY` y `LANGFUSE_SECRET_KEY` son opcionales para ejecuciones locales: si faltan, el agente corre con trazas desactivadas y lo informa en el resumen.
+`OPENAI_MODEL` es opcional. Langfuse tambien es opcional para desarrollo local; si faltan sus credenciales, el CLI informa que las trazas estan desactivadas.
 
-## Agente de componentes
+## Ejecucion
 
-Primero genera el indice local del RAG:
+Los dos scripts abren el mismo CLI interactivo basado en `src/index.ts`:
+
+```bash
+npm start
+npm run agent
+```
+
+Ejemplo de pedido:
+
+```text
+Genera una card de producto para una aplicacion financiera
+```
+
+Comandos del CLI:
+
+| Comando | Funcion |
+| --- | --- |
+| `/plan on` | Ejecuta solo exploracion, investigacion y plan. |
+| `/plan off` | Activa el flujo completo. |
+| `/supervision on` | Solicita confirmacion para tools modificadoras. |
+| `/supervision off` | Usa solamente las aprobaciones obligatorias de la configuracion. |
+| `/exit` | Cierra el CLI y envia las trazas pendientes. |
+
+## Arquitectura
+
+El agente principal recibe el pedido, crea un estado compartido y coordina cinco subagentes secuenciales:
+
+1. **Explorer**: inspecciona estructura, dependencias, convenciones y archivos relevantes.
+2. **Researcher**: consulta primero el RAG y usa busqueda web solo si la evidencia local es insuficiente.
+3. **Implementer**: escribe el componente React, su CSS y sus stories.
+4. **Tester**: ejecuta `npm run typecheck` y `npm run build-storybook`.
+5. **Reviewer**: revisa los archivos, el pedido, las fuentes y los resultados de validacion.
+
+Si Tester o Reviewer detectan un problema, se permite un unico ciclo adicional de Implementer, Tester y Reviewer. Una segunda falla deja la tarea en estado `blocked`.
+
+Cada subagente reutiliza el mismo loop del harness, pero recibe instrucciones y tools diferentes. El estado registra pedido, etapa, resultados, fuentes, archivos modificados, comandos, errores y si hubo reparacion.
+
+## Memoria y contexto
+
+La memoria persistente se guarda en `.agent/memory.json` y no se versiona. Conserva solamente componentes generados, comandos utiles, archivos importantes, convenciones y el resumen de la ultima tarea.
+
+Los subagentes reciben el pedido, la memoria y un resumen del estado compartido. No reciben todo el repositorio ni todo el historial. El CLI conserva como maximo los ultimos seis intercambios.
+
+Una tool no puede repetir dos veces la misma llamada dentro de una etapa sin avanzar. Cada subagente tiene ademas un limite de ocho iteraciones.
+
+## RAG y fuentes
+
+Las fuentes Markdown estan en `rag/sources/`. El proceso divide los documentos en chunks deterministas, obtiene embeddings con OpenAI y guarda el indice vectorial local en `rag/index.json`.
 
 ```bash
 npm run rag:ingest
 ```
 
-Pedile cualquier componente en lenguaje natural, el agente infiere el nombre (PascalCase):
+Researcher usa `rag_search` antes de `web_search`. El RAG se considera suficiente cuando recupera al menos dos chunks y el mejor score es igual o mayor a `0.35`.
 
-```bash
-npm run agent -- "Genera un boton para una aplicacion financiera"
-npm run agent -- "Genera una card de videojuego estilo Friv anos 2000"
-```
+El resumen final diferencia fuentes del repositorio, memoria, RAG y web, e imprime las URLs recuperadas.
 
-La ejecucion hace este flujo:
+## Seguridad
 
-```text
-pedido del usuario
--> recuperacion de documentos del RAG
--> el modelo infiere componentName (ej. GameCard) y genera {componentName}.tsx, .css y .stories.tsx
--> build de Storybook
--> traza en Langfuse
--> resumen final con fuentes utilizadas
-```
+`agent.config.json` se valida al comenzar cada tarea y antes de ejecutar las tools se aplican sus politicas:
 
-Los archivos generados quedan en:
+- no leer `.env`, `secrets/**` ni certificados PEM;
+- no escribir fuera del workspace, `.github/**`, `.env`, `secrets/**` ni `package-lock.json`;
+- no ejecutar `rm -rf` ni `git push`;
+- pedir aprobacion para instalaciones y commits.
 
-```text
-src/components/generated/{componentName}/
-```
+Las rutas se resuelven contra el workspace para bloquear escapes con `../`.
 
-## Storybook
+## Observabilidad
 
-Para levantar Storybook:
+Langfuse registra una traza por pedido. La traza incluye el agente principal, cada subagente, llamadas al modelo, tools, documentos RAG, busquedas web, comandos, errores, latencia, uso del modelo y resultado final.
 
-```bash
-npm run storybook
-```
+Para la entrega se debe ejecutar al menos una tarea con las credenciales de Langfuse configuradas y adjuntar una captura de la traza completa.
 
-Para validar el build:
+## Validacion y evidencia
 
-```bash
-npm run build-storybook
-```
-
-## CLI general existente
-
-El coding agent interactivo original se mantiene:
-
-```bash
-npx tsx src/index.ts
-```
-
-Comandos disponibles:
-
-| Comando | Descripcion |
-| --- | --- |
-| `/plan on` | Activa modo planificacion. |
-| `/plan off` | Vuelve al modo normal. |
-| `/supervision on` | Pide confirmacion antes de herramientas modificadoras. |
-| `/supervision off` | Permite herramientas modificadoras sin confirmacion manual. |
-| `/exit` | Cierra el CLI. |
-
-## Validacion
+No se agregan tests automatizados. La validacion tecnica es:
 
 ```bash
 npm run typecheck
 npm run build-storybook
 ```
 
-El build de Storybook debe finalizar sin errores despues de ejecutar `npm run agent`.
+Tareas sugeridas para las dos evidencias de la entrega:
+
+1. `Genera un boton de confirmacion para una aplicacion financiera siguiendo Material Design.` Debe mostrar chunks del RAG, archivos generados y build exitoso.
+2. Repetir una mejora sobre ese componente en otra sesion. Debe mostrar la memoria previa; alternativamente, hacer un pedido sin evidencia suficiente para demostrar web fallback o detencion explicada.
+
+En cada evidencia guardar el pedido, output final, fuentes, archivos creados, comandos ejecutados y una explicacion breve de lo observado.
+
+## Storybook
+
+```bash
+npm run storybook
+npm run build-storybook
+```
+
+Los componentes generados quedan en:
+
+```text
+src/components/generated/{ComponentName}/
+```

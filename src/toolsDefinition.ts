@@ -73,6 +73,58 @@ const toolDefinitionsByName: Record<ToolName, FunctionTool> = {
       required: ["command"],
       additionalProperties: false
     }
+  },
+  rag_search: {
+    type: "function" as const,
+    name: "rag_search",
+    description: "Busca primero en la documentacion tecnica local indexada.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: { query: { type: "string" } },
+      required: ["query"],
+      additionalProperties: false
+    }
+  },
+  web_search: {
+    type: "function" as const,
+    name: "web_search",
+    description: "Busca evidencia tecnica en la web cuando el RAG local no alcanza.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: { query: { type: "string" } },
+      required: ["query"],
+      additionalProperties: false
+    }
+  },
+  memory_read: {
+    type: "function" as const,
+    name: "memory_read",
+    description: "Lee la memoria persistente del proyecto.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+      additionalProperties: false
+    }
+  },
+  memory_write: {
+    type: "function" as const,
+    name: "memory_write",
+    description: "Actualiza un resumen pequeno de la memoria del proyecto.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        summary: { type: "string" },
+        importantFiles: { type: "array", items: { type: "string" } },
+        conventions: { type: "array", items: { type: "string" } }
+      },
+      required: ["summary", "importantFiles", "conventions"],
+      additionalProperties: false
+    }
   }
 };
 
