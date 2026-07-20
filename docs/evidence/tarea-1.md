@@ -72,9 +72,3 @@ Se reporta intención de modificar/crear:
 3. Si falla por dependencia, correr:
    - `npm i` (verificar que `zod` quedó en deps/devDeps)
 4. Si los tests requieren server: asegurar `listen(0)` + teardown y que el body de error sea estable (y testeado).
-
-Si me pegás el contenido de esos 4 archivos + la salida de `npm test`, te digo exactamente qué está bien, qué rompe y qué falta ajustar.
-
-## Qué se observa
-
-_(completar a mano con la interpretación de este resultado para el informe)_

@@ -151,7 +151,6 @@ ${result.finalText}
 
 ## Qué se observa
 
-_(completar a mano con la interpretación de este resultado para el informe)_
 `.trim();
 
     fs.writeFileSync(path.join(EVIDENCE_DIR, fileName), content, "utf-8");

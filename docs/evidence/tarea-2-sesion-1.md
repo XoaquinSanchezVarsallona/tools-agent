@@ -73,10 +73,3 @@ No se observaron scripts/config explícitos de **lint/format** (eslint/prettier)
 - **Bloqueo probable de build:** `src/utils/logger.ts` importa **`pino`**, pero **`pino` no está en `package.json`**.  
   Además `src/server.ts` importa y usa ese `logger`, así que el build puede fallar con `Cannot find module 'pino'...` (esto parece intencional según comentarios y el archivo `logger.broken.ts.txt`).
 
-Si querés, en el próximo paso puedo:
-- proponer el “fix” mínimo (agregar dependencia o reemplazar logger), o
-- documentar esto como “estado intencionalmente roto” y cómo validar igual (por ejemplo, correr tests si no pasan por el import, etc.).
-
-## Qué se observa
-
-_(completar a mano con la interpretación de este resultado para el informe)_

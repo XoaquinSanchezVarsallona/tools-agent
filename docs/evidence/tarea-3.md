@@ -51,5 +51,3 @@ export const logger: Logger = {
 2) Apenas esté habilitado: aplico el cambio y valido con `npm run build` (y si querés, `npm test`).
 
 ## Qué se observa
-
-_(completar a mano con la interpretación de este resultado para el informe)_
